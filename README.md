@@ -1,9 +1,24 @@
 # narrate
 
-Turn a document into a conversational script with **OpenRouter**, then speak it
-with **Pocket TTS**, using the **michael** voice on the DGX. **Whisper base.en**
-independently transcribes the recording; **FFmpeg** normalizes and encodes it.
+Turn a document into a conversational script and audio with **OpenRouter**,
+then speak it with **Pocket TTS** on the DGX or the macOS `say` voice. The
+Pocket path independently verifies the recording with **Whisper base.en** and
+normalizes it with **FFmpeg**. Narrate also emits phase-based progress so CLI
+agents and humans can see what it is doing when it matters.
+
 This is the stack used by the `coaching-audio` skill.
+
+## Companion repos
+
+- [narrate-cursor](https://github.com/narrate-it/narrate-cursor) for Cursor
+  project commands
+- [narrate-claude-code](https://github.com/narrate-it/narrate-claude-code) for
+  Claude Code MCP prompts
+- [narrate-codex](https://github.com/narrate-it/narrate-codex) for the Codex
+  plugin
+
+We build narrate, a small set of tools that help CLI agents speak only when it
+matters.
 
 ## Use
 
@@ -35,6 +50,12 @@ install -m 755 narrate ~/.local/bin/narrate
 Ensure `~/.local/bin` is on PATH. Pocket output requires local `python3`,
 `scp`, and `ffmpeg`. Playback requires macOS `afplay`; other platforms can
 save files with `-o`.
+
+For agent narration, use the companion repos:
+
+- Cursor: `./install.sh /path/to/project` from `narrate-cursor`
+- Claude Code: `./install.sh` from `narrate-claude-code`
+- Codex: `./install.sh` from `narrate-codex`
 
 ## Configuration
 
