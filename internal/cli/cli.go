@@ -48,7 +48,7 @@ Options:
                           mode; no audio, no TTS, works on all platforms).
   --script-out=FILE       Save the final spoken script to FILE.
   --verbatim              Skip the AI rewrite; no AI credential needed.
-  --style=STYLE           conversational (default) | coach
+  --style=STYLE           conversational (default) | coach | agent-update
   --minutes=N             Reserved; duration targeting is not yet supported.
   --artifacts-dir=DIR     Save transcript, chapters, and manifest.
   --resume                Reuse validated cached work for identical settings.
@@ -150,8 +150,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		usageErr(stderr, fmt.Errorf("--rate must be a positive words-per-minute value"))
 		return ExitUsage
 	}
-	if *style != "conversational" && *style != "coach" {
-		usageErr(stderr, fmt.Errorf("--style must be conversational or coach, got %q", *style))
+	if *style != "conversational" && *style != "coach" && *style != "agent-update" {
+		usageErr(stderr, fmt.Errorf("--style must be conversational, coach or agent-update, got %q", *style))
 		return ExitUsage
 	}
 	if *tts != "" && *tts != "native" && *tts != "pocket" {
