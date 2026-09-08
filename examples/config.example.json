@@ -1,0 +1,14 @@
+{
+  "ai": {
+    "provider": "openrouter",
+    "model": "your-chosen-model-id"
+  },
+  "tts": {
+    "backend": "pocket",
+    "voice": "michael",
+    "spark_url": "http://YOUR-DGX:8080",
+    "ssh_host": "USER@YOUR-DGX",
+    "ssh_uid": 1000
+  },
+  "paragraph_gap_ms": 650
+}

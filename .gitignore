@@ -1,0 +1,5 @@
+/narrate
+*.aiff
+*.wav
+__pycache__/
+*.mp3
