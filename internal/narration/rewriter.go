@@ -78,7 +78,7 @@ func (r *Rewriter) rewriteOneN(ctx context.Context, ch Chunk, total int) (string
 			return "", err
 		}
 		out = sanitizeScript(out)
-		if looksTruncated(out, ch) {
+		if (r.Style != "agent-update" && looksTruncated(out, ch)) || (r.Style == "agent-update" && (strings.TrimSpace(out) == "" || len(strings.Fields(out)) > 120)) {
 			if attempt == maxRepairs {
 				return "", ErrTruncated
 			}

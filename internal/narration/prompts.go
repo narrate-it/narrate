@@ -23,6 +23,7 @@ var ModuleIDs = []string{"fidelity", "voice", "concreteness", "pacing", "listeni
 var StyleModules = map[string]string{
 	"conversational": "conversational",
 	"coach":          "coach",
+	"agent-update":   "agent-update",
 }
 
 // ReviewModuleID is included on both first attempts and repairs.
@@ -103,10 +104,11 @@ func Manifest() (PromptManifest, error) {
 	if err != nil {
 		return m, err
 	}
-	// coach style adds no distinct files beyond conversational's set
+	// Include every additional style module in the artifact manifest.
 	if _, err := ModulesForStyle("coach"); err != nil {
 		return m, err
 	}
+	ids = append(ids, "coach", "agent-update")
 	for _, id := range ids {
 		data, err := loadModule(id)
 		if err != nil {
