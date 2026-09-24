@@ -1,0 +1,12 @@
+{
+  "name": "narrate-it",
+  "owner": { "name": "Narrate", "url": "https://github.com/narrate-it" },
+  "metadata": { "description": "Voice tools for coding agents." },
+  "plugins": [
+    {
+      "name": "narrate",
+      "source": "./",
+      "description": "Speak documents and concise coding updates with local macOS speech or Pocket TTS."
+    }
+  ]
+}

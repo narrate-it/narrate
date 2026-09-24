@@ -1,0 +1,116 @@
+name: Release CLI
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - name: Verify bootstrap
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Test CLI
+        run: go test -v ./...
+      - name: Build release binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(cat scripts/cli-version)
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            test "$GITHUB_REF_NAME" = "v$version"
+          fi
+          mkdir -p dist
+          for os in darwin linux; do
+            for arch in amd64 arm64; do
+              asset="dist/narrate_${version}_${os}_${arch}"
+              CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath -o "$asset" .
+              sha256sum "$asset" | cut -d ' ' -f 1 > "$asset.sha256"
+            done
+          done
+          for arch in amd64 arm64; do
+            asset="dist/narrate_linux_${arch}.deb"
+            sh scripts/package-deb.sh "$version" "$arch" "dist/narrate_${version}_linux_${arch}" "$asset"
+            sha256sum "$asset" | cut -d ' ' -f 1 > "$asset.sha256"
+          done
+          "dist/narrate_${version}_linux_amd64" --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-binaries
+          path: dist/*
+          if-no-files-found: error
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-binaries
+          path: dist
+      - name: Publish verified assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" dist/* --verify-tag --generate-notes
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: formula-repo
+      - name: Update Homebrew formula for the release
+        working-directory: formula-repo
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          version=${RELEASE_VERSION#v}
+          sh scripts/update-homebrew-formula.sh "$version" ../dist
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/narrate.rb
+          if ! git diff --cached --quiet; then
+            git commit -m "Update Homebrew formula to $version"
+            git push origin main
+          fi
+  publish-apt-repository:
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_APT_REPO == 'true'
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-binaries
+          path: dist
+      - name: Prepare apt tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes apt-utils dpkg-dev
+      - name: Build signed apt repository
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+          APT_SIGNING_PASSPHRASE: ${{ secrets.APT_SIGNING_PASSPHRASE }}
+        run: sh scripts/publish-apt-repo.sh dist apt-site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apt-site
+      - name: Deploy apt repository
+        id: deployment
+        uses: actions/deploy-pages@v4

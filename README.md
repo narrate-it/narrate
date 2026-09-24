@@ -39,22 +39,109 @@ beginning with a dash.
 
 ## Install
 
-Requires Go 1.22+. Build and install on your user PATH:
+### Install with a coding agent
 
-```sh
-go build -o narrate .
-mkdir -p ~/.local/bin
-install -m 755 narrate ~/.local/bin/narrate
+Paste this prompt into your coding agent:
+
+```text
+Install Narrate using its official instructions at
+https://github.com/narrate-it/narrate#install. Detect my operating system and
+use the documented Homebrew or apt package when available. Verify the
+installation by running `narrate --version`. Do not configure AI credentials
+or change Narrate settings. Set up its documented automatic-update method too,
+but ask before using sudo, adding package sources, or scheduling background
+updates. If this platform has no supported package yet, tell me what is
+missing and stop.
 ```
 
-Ensure `~/.local/bin` is on PATH. Pocket output requires local `python3`,
-`scp`, and `ffmpeg`. Playback requires macOS `afplay`; other platforms can
-save files with `-o`.
+### Claude Code (marketplace)
 
-For agent narration, use the companion repos:
+```sh
+claude plugin marketplace add narrate-it/narrate
+claude plugin install narrate@narrate-it
+```
+
+Restart Claude Code, then ask it to speak:
+
+```text
+/narrate:speak Summarize what we just changed
+/narrate:speak /absolute/path/to/report.md
+```
+
+The plugin checks for a newer CLI release every six hours, verifies its
+SHA-256 checksum, and caches it for later calls. Supports macOS and Linux on
+ARM64 and x86-64; requires `curl` and `shasum` or `sha256sum`.
+No Go installation, manual build, `/narrate:install`, or PATH changes are
+needed. On macOS, coding updates use local speech by default when no backend
+is configured: no API key or DGX required. Pocket TTS and AI document rewriting need the
+[configuration below](#configuration).
+
+Adding the marketplace registers the catalog; the second command installs
+the plugin. This follows Claude Code's
+[marketplace installation flow](https://code.claude.com/docs/en/plugin-marketplaces).
+
+### Homebrew
+
+After the first tagged release, install the formula directly from this repo:
+
+```sh
+brew install narrate-it/narrate/narrate
+```
+
+Each CLI release updates the formula with the release's verified binary
+checksums. Package-managed installs stay under Homebrew. To schedule daily
+upgrades, install [Homebrew Autoupdate](https://github.com/DomT4/homebrew-autoupdate)
+and start it for Narrate:
+
+```sh
+brew tap domt4/autoupdate
+brew autoupdate start 1d --upgrade --only=narrate-it/narrate/narrate
+```
+
+### Debian and Ubuntu
+
+Once the signed apt feed is enabled by the repository owner, add its source and
+install Narrate:
+
+```sh
+arch=$(dpkg --print-architecture)
+case "$arch" in amd64|arm64) ;; *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; esac
+sudo install -d -m 755 /etc/apt/keyrings
+curl --fail --location https://narrate-it.github.io/narrate/narrate-archive-keyring.asc \
+  | sudo gpg --dearmor --yes --output /etc/apt/keyrings/narrate.gpg
+printf 'deb [arch=%s signed-by=/etc/apt/keyrings/narrate.gpg] https://narrate-it.github.io/narrate stable main\n' "$arch" \
+  | sudo tee /etc/apt/sources.list.d/narrate.list >/dev/null
+sudo apt update
+sudo apt install narrate unattended-upgrades
+printf 'Unattended-Upgrade::Origins-Pattern { "origin=Narrate,label=Narrate"; };\n' \
+  | sudo tee /etc/apt/apt.conf.d/52narrate-unattended >/dev/null
+sudo dpkg-reconfigure -plow unattended-upgrades
+```
+
+The apt feed is signed and publishes the latest Debian packages on each CLI
+release. Its first publication requires the repository owner to enable GitHub
+Pages, set `PUBLISH_APT_REPO=true`, and add the apt signing key secrets, as
+described in [package release setup](docs/package-release-setup.md).
+
+### Standalone CLI
+
+Requires Go 1.22+. Build and install the CLI plus its self-updating launcher:
+
+```sh
+sh scripts/install-local.sh
+```
+
+The launcher checks GitHub Releases every six hours, downloads only HTTPS
+release assets and verifies their SHA-256 checksum before using an update.
+It keeps using the installed binary when the network is unavailable. Ensure
+`~/.local/bin` is on PATH. Pocket output requires local `python3`, `scp`, and
+`ffmpeg`; playback requires macOS `afplay`; other platforms can save files
+with `-o`.
+
+For other agent integrations, use the companion repos:
 
 - Cursor: `./install.sh /path/to/project` from `narrate-cursor`
-- Claude Code: `./install.sh` from `narrate-claude-code`
+- Claude Code MCP prompts (alternative): `./install.sh` from `narrate-claude-code`
 - Codex: `./install.sh` from `narrate-codex`
 
 ## Configuration

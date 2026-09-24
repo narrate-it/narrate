@@ -1,0 +1,8 @@
+{
+  "name": "narrate",
+  "version": "0.1.0",
+  "description": "Speak documents and concise coding updates with local macOS speech or Pocket TTS.",
+  "author": { "name": "Narrate" },
+  "homepage": "https://github.com/narrate-it/narrate",
+  "repository": "https://github.com/narrate-it/narrate"
+}
