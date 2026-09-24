@@ -1,10 +1,9 @@
 # narrate
 
-Turn a document into a conversational script and audio with **OpenRouter**,
-then speak it with **Pocket TTS** on the DGX or the macOS `say` voice. The
-Pocket path independently verifies the recording with **Whisper base.en** and
-normalizes it with **FFmpeg**. Narrate also emits phase-based progress so CLI
-agents and humans can see what it is doing when it matters.
+Narrate turns documents into spoken scripts and audio with configurable
+AI rewriting, Pocket TTS on a DGX, or local macOS `say`. It also gives CLI
+coding agents concise, phase-based progress updates. When you pass `-o FILE`,
+Narrate saves the recording without playing it through the speakers.
 
 This is the stack used by the `coaching-audio` skill.
 
@@ -32,6 +31,8 @@ cat report.md | narrate --script-only > spoken.txt
 A single file path is read as a document, including quoted paths with spaces.
 Missing path-like arguments fail before AI calls. `-f FILE` remains supported.
 To narrate a pathname literally, pipe it through stdin.
+
+Use `-o FILE` to write an audio file without speaker playback.
 
 `--verbatim` skips AI rewriting and needs no AI key. `--script-only` skips all
 audio dependencies. Options go before positional text; use `--` before text
