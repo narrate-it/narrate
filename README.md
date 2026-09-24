@@ -40,21 +40,25 @@ beginning with a dash.
 
 ## Install
 
-### Install with a coding agent
+### Install the CLI and plugins with a coding agent
 
-Paste this prompt into your coding agent:
+Copy this prompt into a coding agent to install Narrate and the official
+integration(s) for the agents you use:
 
 ```text
-Install Narrate using its official instructions at
-https://github.com/narrate-it/narrate#install. Detect my operating system and
-use the documented Homebrew or apt package when available. Verify the
-installation by running `narrate --version`. Do not configure AI credentials
-or change Narrate settings. Set up its documented automatic-update method too,
-but ask before using sudo, adding package sources, or scheduling background
-updates. If this platform has no supported package yet, tell me what is
-missing and stop.
-```
+Install or update the Narrate CLI and its official coding-agent plugin(s).
 
+1. Detect my operating system, architecture, and which of Codex, Cursor, and Claude Code I use in this environment. If you cannot tell which integrations I want, ask me before installing plugins.
+2. Follow the CLI's official install guide: https://github.com/narrate-it/narrate#install. Prefer the supported native package manager. If an apt feed is not enabled, use the matching .deb from https://github.com/narrate-it/narrate/releases/latest and explain that unattended apt updates require the signed feed.
+3. Install the matching official integration(s), following each repository's README:
+   - Codex: https://github.com/narrate-it/narrate-codex
+   - Cursor: https://github.com/narrate-it/narrate-cursor
+   - Claude Code: https://github.com/narrate-it/narrate-claude-code
+4. Verify `narrate --version` and confirm each selected plugin or command is available.
+5. Set up the documented update method for the chosen CLI install: native package-manager updates for Homebrew/apt, or Narrate's self-updating launcher for a standalone install. Never layer the self-updater onto a package-managed install.
+
+Use only these official Narrate repositories. Preserve existing settings and files; ask before overwriting files, using sudo, adding package sources, or scheduling background updates. Do not configure AI credentials or run a narration. Report what was installed, how it updates, and anything that still needs setup.
+```
 ### Claude Code (marketplace)
 
 ```sh
