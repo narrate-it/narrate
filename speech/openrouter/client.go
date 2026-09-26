@@ -17,7 +17,7 @@ import (
 
 const BaseURL = "https://openrouter.ai/api/v1"
 const MaxAudioBytes = 2 << 20
-const MaxSpeechBytes = 8 << 20
+const MaxSpeechBytes = 4 << 20
 
 type Client struct {
 	Key     string
@@ -74,7 +74,7 @@ func (c Client) call(ctx context.Context, path string, body any, max int64) (Res
 	if err != nil {
 		return out, nil, &CallError{MayHaveExecuted: sent, Reason: "request interrupted; billing may be unknown"}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return out, nil, &CallError{Status: resp.StatusCode, MayHaveExecuted: true, Reason: "provider refused speech request"}
 	}
