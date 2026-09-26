@@ -2,7 +2,7 @@ package cli
 
 import (
 	"context"
-	"example.com/narrate/internal/config"
+	"github.com/narrate-it/narrate/internal/config"
 	"os"
 	"os/exec"
 	"path/filepath"

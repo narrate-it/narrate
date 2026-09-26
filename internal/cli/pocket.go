@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"example.com/narrate/internal/pocket"
+	"github.com/narrate-it/narrate/internal/pocket"
 )
 
 func runPocketAudio(ctx context.Context, stdout, stderr io.Writer, source, script string, o options) error {

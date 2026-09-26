@@ -10,8 +10,8 @@ import (
 	"runtime"
 	"strings"
 
-	"example.com/narrate/internal/config"
-	"example.com/narrate/internal/input"
+	"github.com/narrate-it/narrate/internal/config"
+	"github.com/narrate-it/narrate/internal/input"
 )
 
 // Version is the released tool version.

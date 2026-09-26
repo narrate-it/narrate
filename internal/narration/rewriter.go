@@ -7,13 +7,21 @@ import (
 	"strings"
 	"time"
 
-	"example.com/narrate/internal/ai"
+	"github.com/narrate-it/narrate/internal/ai"
 )
+
+// RewriteClient supplies a single rewrite operation. Hosts can implement this
+// interface to enforce their own credentials, authorization and accounting.
+type RewriteClient interface {
+	Rewrite(context.Context, string, string) (string, error)
+}
 
 // Rewriter converts source chunks into a spoken script using an AI client.
 type Rewriter struct {
-	Client *ai.Client
+	Client RewriteClient
 	Style  string
+	// DisableRetries leaves retry admission to the host application.
+	DisableRetries bool
 }
 
 // rewriteContext is the application-controlled request context sent separately
@@ -43,6 +51,12 @@ func (r *Rewriter) RewriteAll(ctx context.Context, chunks []Chunk, onProgress fu
 // RewriteAllWithCount processes chunks in order, repairing truncated responses
 // with bounded retries. Returns one script segment per chunk, in order.
 func (r *Rewriter) RewriteAllWithCount(ctx context.Context, chunks []Chunk, onProgress func(done, total int)) ([]string, error) {
+	if r.Client == nil {
+		return nil, errors.New("narration: missing rewrite client")
+	}
+	if _, err := ModulesForStyle(r.Style); err != nil {
+		return nil, err
+	}
 	parts := make([]string, len(chunks))
 	for i := range chunks {
 		var err error
@@ -63,7 +77,10 @@ func (r *Rewriter) rewriteOneN(ctx context.Context, ch Chunk, total int) (string
 		return "", err
 	}
 	prompt := buildChunkPrompt(ch, total, r.Style)
-	const maxRepairs = 2
+	maxRepairs := 2
+	if r.DisableRetries {
+		maxRepairs = 0
+	}
 	for attempt := 0; ; attempt++ {
 		out, err := r.Client.Rewrite(ctx, instructions, prompt)
 		if err != nil {

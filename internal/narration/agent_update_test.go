@@ -3,7 +3,7 @@ package narration
 import (
 	"context"
 	"encoding/json"
-	"example.com/narrate/internal/ai"
+	"github.com/narrate-it/narrate/internal/ai"
 	"net/http"
 	"net/http/httptest"
 	"strings"

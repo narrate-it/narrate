@@ -15,11 +15,11 @@ import (
 	"syscall"
 	"time"
 
-	"example.com/narrate/internal/ai"
-	"example.com/narrate/internal/cache"
-	"example.com/narrate/internal/config"
-	"example.com/narrate/internal/input"
-	"example.com/narrate/internal/narration"
+	"github.com/narrate-it/narrate/internal/ai"
+	"github.com/narrate-it/narrate/internal/cache"
+	"github.com/narrate-it/narrate/internal/config"
+	"github.com/narrate-it/narrate/internal/input"
+	"github.com/narrate-it/narrate/internal/narration"
 )
 
 // errCanceled signals Ctrl-C.

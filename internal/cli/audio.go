@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"example.com/narrate/internal/audio"
+	"github.com/narrate-it/narrate/internal/audio"
 )
 
 // ChapterInfo records a paragraph's start time in the final audio.

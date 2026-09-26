@@ -5,7 +5,7 @@ package main
 import (
 	"os"
 
-	"example.com/narrate/internal/cli"
+	"github.com/narrate-it/narrate/internal/cli"
 )
 
 func main() {
