@@ -7,6 +7,8 @@ from pathlib import Path
 import argparse
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--directory", type=Path, required=True)
+parser.add_argument("--device", choices=["cuda", "cpu"], default="cpu")
+parser.add_argument("--cache", type=Path, required=True)
 args = parser.parse_args()
 
 import torch
@@ -21,8 +23,8 @@ out = args.directory
 assert (out / "manifest.json").exists(), "Render is not complete"
 start = time.monotonic()
 print("Loading Whisper base.en for complete audio check", flush=True)
-model = whisper.load_model("base.en", device="cpu", download_root="/host/vibevoice-cache/whisper")
-sample_rate, audio = wavfile.read(out / "coach-raw.wav")
+model = whisper.load_model("base.en", device=args.device, download_root=str(args.cache))
+sample_rate, audio = wavfile.read(out / "narration-raw.wav")
 assert audio.dtype == np.float32 and audio.ndim == 1
 factor = math.gcd(sample_rate, 16000)
 audio = resample_poly(audio, 16000 // factor, sample_rate // factor).astype(np.float32)

@@ -40,22 +40,22 @@ class PipelineTest(unittest.TestCase):
                     response.data = b'PARAGRAPH 1/2' if status_reads == 1 else b'PARAGRAPH 1/2\nPARAGRAPH 2/2'
                     return response
                 calls.append((req.method,req.full_url))
-                if req.full_url.endswith('/resources'): return Response({'available':{'cpuMillis':1000,'memoryMB':6144}})
+                if req.full_url.endswith('/resources'): return Response({'available':{'cpuMillis':1000,'memoryMB':6144,'gpuCount':1}})
                 if req.method == 'GET':
                     status_reads += 1
                     return Response({'status':'running' if streaming and status_reads == 1 else 'completed'})
                 if req.method == 'POST':
                     pod = json.loads(req.data)
-                    self.assertEqual(pod['spec']['containers'][0]['resources']['limits'],{'cpu':'1','memory':'6Gi'})
+                    self.assertEqual(pod['spec']['containers'][0]['resources']['limits'],{'cpu':'1','memory':'6Gi','nvidia.com/gpu':'1'})
                     self.assertNotIn(script,pod['spec']['containers'][0]['args'][0])
                 return Response({})
             def command(args, **kwargs):
                 commands.append(args)
                 if args[0] == 'scp':
                     name = args[-2].split('/')[-1]
-                    data = {'manifest.json':json.dumps(manifest),'heard.txt':script,'heard.json':'{}','coach-raw.wav':'wave','paragraph-001.wav':'one','paragraph-002.wav':'two'}[name]
+                    data = {'manifest.json':json.dumps(manifest),'heard.txt':script,'heard.json':'{}','narration-raw.wav':'wave','paragraph-001.wav':'one','paragraph-002.wav':'two'}[name]
                     Path(args[-1]).write_text(data)
-            cfg = dict(directory=temp,spark_url='http://spark.test',ssh_host='user@host',ssh_uid=1000,
+            cfg = dict(directory=temp,spark_url='http://remote.test',ssh_host='user@remote',host_path='/srv/narration',python_path='/host/cache/venv/bin/python',output_subdir='output',cache_subdir='cache',image='nvcr.io/nvidia/pytorch:26.02-py3',device='cuda',speed=1,connect_timeout_seconds=3,ssh_uid=1000,
                        voice='michael',gap_ms=650,resume=False,playback=streaming,format='MP3',output=str(root/'out.mp3'))
             with patch.object(driver.urllib.request,'urlopen',side_effect=request), patch.object(driver.subprocess,'run',side_effect=command), patch.object(driver,'Playback',return_value=Player()) as player, patch.object(driver.time,'sleep'):
                 driver.run(cfg)
@@ -79,9 +79,9 @@ class PipelineTest(unittest.TestCase):
 
     def test_capacity_refuses_submission(self):
         with tempfile.TemporaryDirectory() as temp:
-            with patch.object(driver.urllib.request,'urlopen',return_value=Response({'available':{'cpuMillis':999,'memoryMB':6144}})) as request:
+            with patch.object(driver.urllib.request,'urlopen',return_value=Response({'available':{'cpuMillis':999,'memoryMB':6144,'gpuCount':1}})) as request:
                 with self.assertRaisesRegex(RuntimeError,'1 free CPU'):
-                    driver.run(dict(directory=temp,spark_url='http://spark.test',resume=False))
+                    driver.run(dict(directory=temp,spark_url='http://remote.test',ssh_host='user@remote',host_path='/srv/narration',python_path='/host/cache/venv/bin/python',resume=False,device='cuda'))
                 self.assertEqual(request.call_count,1)
 
     def test_failed_job_is_cleaned_up(self):
@@ -91,9 +91,9 @@ class PipelineTest(unittest.TestCase):
             def request(req,**kwargs):
                 if isinstance(req,str): return Response({'logs':'failure'})
                 calls.append(req.method)
-                if req.full_url.endswith('/resources'): return Response({'available':{'cpuMillis':1000,'memoryMB':6144}})
+                if req.full_url.endswith('/resources'): return Response({'available':{'cpuMillis':1000,'memoryMB':6144,'gpuCount':1}})
                 return Response({'status':'failed'})
-            cfg=dict(directory=temp,spark_url='http://spark.test',resume=False,voice='michael',gap_ms=650,ssh_uid=1000)
+            cfg=dict(directory=temp,spark_url='http://remote.test',ssh_host='user@remote',host_path='/srv/narration',python_path='/host/cache/venv/bin/python',output_subdir='output',cache_subdir='cache',image='nvcr.io/nvidia/pytorch:26.02-py3',device='cuda',speed=1,connect_timeout_seconds=3,resume=False,voice='michael',gap_ms=650,ssh_uid=1000)
             with patch.object(driver.urllib.request,'urlopen',side_effect=request):
                 with self.assertRaisesRegex(RuntimeError,'failed'): driver.run(cfg)
             self.assertEqual(calls,['GET','POST','GET','DELETE'])

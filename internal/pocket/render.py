@@ -1,4 +1,4 @@
-"""One-off, resumable Pocket TTS rendering on the existing DGX cache."""
+"""One-off, resumable Pocket TTS rendering on a configured remote device."""
 import hashlib
 import json
 import os
@@ -12,8 +12,11 @@ parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--voice", default="michael")
 parser.add_argument("--gap-ms", type=int, default=650)
 parser.add_argument("--ssh-uid", type=int, required=True)
+parser.add_argument("--device", choices=["cuda", "cpu"], default="cuda")
+parser.add_argument("--cache", type=Path, required=True)
+parser.add_argument("--speed", type=float, default=1.0)
 args = parser.parse_args()
-os.environ.setdefault("HF_HOME", "/host/vibevoice-cache/hf")
+os.environ.setdefault("HF_HOME", str(args.cache))
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
@@ -32,11 +35,13 @@ if not paragraphs:
 out = args.output
 out.mkdir(parents=True, exist_ok=True)
 os.chown(out, args.ssh_uid, -1)
-(out / "coach-script.txt").write_text(text)
+(out / "narration-script.txt").write_text(text)
 started = time.monotonic()
 print(f"START paragraphs={len(paragraphs)} output={out}", flush=True)
 model = TTSModel.load_model()
-model.to("cpu")
+if args.device == "cuda" and not torch.cuda.is_available():
+    raise RuntimeError("UNAVAILABLE: CUDA requested but torch.cuda.is_available() is false")
+model.to(args.device)
 voice = args.voice
 state = model.get_state_for_audio_prompt(voice)
 sample_rate = model.sample_rate
@@ -44,7 +49,7 @@ manifest = {
     "script_sha256": digest,
     "voice": voice,
     "engine": "Pocket TTS",
-    "device": "cpu",
+    "device": args.device,
     "sample_rate": sample_rate,
     "paragraph_count": len(paragraphs),
     "gap_seconds": (args.gap_ms / 1000),
@@ -87,7 +92,7 @@ for index, paragraph in enumerate(paragraphs):
     print(f"PARAGRAPH {index + 1}/{len(paragraphs)} audio={seconds:.1f}s elapsed={time.monotonic() - started:.1f}s", flush=True)
 
 audio = np.concatenate(clips)
-wavfile.write(out / "coach-raw.wav", sample_rate, audio)
+wavfile.write(out / "narration-raw.wav", sample_rate, audio)
 manifest["duration_seconds"] = len(audio) / sample_rate
 manifest["render_seconds"] = time.monotonic() - started
 manifest["complete"] = True
