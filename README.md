@@ -1,12 +1,11 @@
 # narrate
 
-Narrate turns documents into spoken scripts and audio with configurable
-AI rewriting and speech through OpenRouter, with local macOS `say` fallback
-and an explicit Pocket TTS backend on a DGX. It also gives CLI
-coding agents concise, phase-based progress updates. When you pass `-o FILE`,
-Narrate saves the recording without playing it through the speakers.
-
-This is the stack used by the `coaching-audio` skill.
+Narrate turns documents into spoken scripts and audio with configurable AI
+rewriting and speech. By default, it tries a remote Pocket TTS backend, then
+OpenRouter, then the platform native voice. The order is configurable, and
+explicit backend selection is available when you want one renderer. Narrate also
+gives CLI coding agents concise, phase-based progress updates. Pass `-o FILE`
+to save a recording without playing it through the speakers.
 
 ## Companion repos
 
@@ -78,9 +77,9 @@ The plugin checks for a newer CLI release every six hours, verifies its
 SHA-256 checksum, and caches it for later calls. Supports macOS and Linux on
 ARM64 and x86-64; requires `curl` and `shasum` or `sha256sum`.
 No Go installation, manual build, `/narrate:install`, or PATH changes are
-needed. On macOS, coding updates use local speech by default when no backend
-is configured: no API key or DGX required. Pocket TTS and AI document rewriting need the
-[configuration below](#configuration).
+needed. Speech uses the configured backend order. OpenRouter requires credentials;
+remote Pocket requires an endpoint and SSH access; native speech depends on the
+platform. See [configuration](#configuration).
 
 Adding the marketplace registers the catalog; the second command installs
 the plugin. This follows Claude Code's
@@ -159,51 +158,54 @@ file. Precedence: flags, environment, config, defaults.
 ```sh
 export OPENROUTER_API_KEY='your-key'
 export NARRATE_AI_MODEL='openrouter/auto'
-export NARRATE_TTS_MODEL='mistralai/voxtral-mini-tts-2603'
-export NARRATE_TTS_VOICE='en_paul_neutral'
+export NARRATE_TTS_BACKEND='auto'
+export NARRATE_SPARK_URL='http://spark.example:8080'
+export NARRATE_REMOTE_SSH_HOST='user@gpu.example'
 ```
 
-OpenRouter is the default speech backend. Set `tts.model` or `NARRATE_TTS_MODEL`
-to a speech model, separate from `ai.model` / `NARRATE_AI_MODEL` for rewriting.
-Set `tts.voice` or `NARRATE_TTS_VOICE` to a voice supported by your model.
-Speech uses [OpenRouter's audio speech endpoint](https://openrouter.ai/docs/guides/overview/multimodal/tts).
-`OPENROUTER_API_KEY` supplies both calls; `tts.api_key` / `NARRATE_TTS_API_KEY`
-can supply a separate speech credential. OpenAI credentials are never used for
-OpenRouter speech. OpenRouter audio decoding requires `ffmpeg`.
+Speech defaults to `tts.backend: "auto"` and tries `tts.backends` in order;
+the default order is `pocket`, `openrouter`, `native`. Configure a different
+order or omit backends you do not use. `--tts=auto` follows that order;
+`--tts=pocket`, `--tts=openrouter`, or `--tts=native` selects one backend.
+`--tts=pocket,openrouter,native` provides an ordered list for that invocation.
+A backend that is unavailable can be skipped. A local execution error or
+cancellation stops the run instead of silently switching backends.
 
-On macOS, missing speech settings or a failed speech request falls back to the
-system default `say` voice, with a notice on stderr. A failed OpenRouter rewrite
-in audio mode reads the original text with native speech. `--script-only` still
-reports rewrite errors. Cancellation and local output failures are not retried
-through another backend. Speech requests have a 60-second timeout and are not
-retried; a timeout may still have incurred provider charges. The manifest records
-the backend that actually generated the recording. There is no global default
-speech model, and OpenRouter speech is not cached by `--resume`.
+Set `tts.voices` by backend. Defaults are Pocket `michael`, OpenRouter
+`en_paul_neutral`, and the platform's native default voice. OpenRouter's voice
+must be supported by the selected speech model. Set `tts.model` or
+`NARRATE_TTS_MODEL` to choose the OpenRouter speech model; it is separate from
+`ai.model` / `NARRATE_AI_MODEL` for rewriting. `OPENROUTER_API_KEY` can supply
+both OpenRouter requests; `tts.api_key` / `NARRATE_TTS_API_KEY` can provide a
+separate speech credential. Speech uses
+[OpenRouter's audio speech endpoint](https://openrouter.ai/docs/guides/overview/multimodal/tts)
+and requires `ffmpeg` to decode returned audio.
 
-Use `--speed=0.85` for slower speech without lowering pitch. OpenRouter and
-native speech apply this locally through ffmpeg, so provider speed support is
-not required. Set `tts.speed` in config or `NARRATE_TTS_SPEED` in the environment
-for a persistent default; flags override both. The global default is `1`, and
-the supported range is `0.5` through `2`. The setting also applies to native
-fallback. Paragraph pauses retain their configured length, and chapter timings
-are measured after the speech adjustment. Pocket requires `--speed=1`.
+Remote Pocket speech uses the Spark-compatible endpoint in `tts.spark_url` or
+`NARRATE_SPARK_URL`, plus the SSH host in `tts.ssh_host` or
+`NARRATE_REMOTE_SSH_HOST`.
+Set `tts.remote_host_path` to the directory mounted on the remote host and
+`tts.remote_python` to its Python interpreter; for example `/srv/narrate` and
+`/host/venv/bin/python`. The remote output and cache directories default to
+`output` and `cache`. The default container image is
+`nvcr.io/nvidia/pytorch:26.02-py3`. Connection setup times out after 3 seconds
+by default. `tts.device` selects the actual Torch device (`cuda` by default;
+set it to `cpu` when needed). All remote values are configurable; see the
+example config for the full set.
+
+A failed OpenRouter rewrite in audio mode reads the source text for speech;
+`--script-only` reports rewrite errors. Cancellation and local output failures
+are not retried through another backend. The manifest records the backend that
+generated the recording.
+
+Set `tts.speed` or `NARRATE_TTS_SPEED` for a persistent speech speed; the CLI
+flag takes precedence. The default is `1`, with a supported range of `0.5` to
+`2`. The adjustment applies to OpenRouter and native speech through `ffmpeg`
+and preserves pitch. Pocket requires speed `1`.
 
 ```sh
 narrate --speed=0.85 --verbatim 'Hello from Narrate.'
 ```
-
-Use `--tts=native` to explicitly select macOS speech, or `--tts=pocket` to use
-the DGX. Pocket requires `NARRATE_SPARK_URL` and `NARRATE_DGX_SSH_HOST` (or
-`tts.spark_url` and `tts.ssh_host` in config).
-
-Pocket submits a tracked Spark pod using the existing DGX environment:
-`nvcr.io/nvidia/pytorch:26.02-py3`, `/host/vibevoice-cache/venv/bin/python`,
-Pocket TTS's default model, and Whisper `base.en`. Each job needs 1 free CPU
-and 6 GiB RAM; it does not request a GPU or stop other workloads. Output is
-retrieved with SCP, then the task's pod is deleted. Remote files remain under
-`/var/lib/zerfoo/vibevoice-out/narrate-*` for recovery. `tts.ssh_uid` defaults
-to 1000 and must match the SSH user's UID so it can retrieve private files.
-No separate HTTP TTS service or paid speech provider is needed.
 
 `openrouter/auto` lets OpenRouter choose a rewrite model; set an explicit model
 ID to control that choice. Narrate uses
@@ -212,9 +214,10 @@ Direct OpenAI remains available with `NARRATE_AI_PROVIDER=openai`,
 `OPENAI_API_KEY`, and `NARRATE_AI_MODEL`.
 
 Other environment options: `NARRATE_AI_BASE_URL`, `NARRATE_AI_API_KEY`
-(overrides the provider-specific key), `NARRATE_TTS_BACKEND`,
-`NARRATE_TTS_VOICE`, `NARRATE_TTS_MODEL`, `NARRATE_TTS_API_KEY`,
-`NARRATE_TTS_BASE_URL` (official endpoint or loopback test server), and `NARRATE_CACHE_DIR`.
+(overrides the provider-specific key), `NARRATE_TTS_VOICE`,
+`NARRATE_TTS_MODEL`, `NARRATE_TTS_API_KEY`, `NARRATE_TTS_SPEED`,
+`NARRATE_CACHE_DIR`. Configure remote connection and runtime fields in the
+JSON config file.
 
 ## Audio and verification
 
@@ -249,16 +252,16 @@ offsets, Whisper transcription and comparison. Evidence is also retained in
 the local Pocket cache. `--resume` reuses a completed render and transcription
 for matching text, voice, gap, endpoint and renderer settings. Interrupted
 remote jobs are retained as files, but are not automatically resumed. Clear
-the corresponding cache after changing DGX model versions.
+the corresponding cache after changing remote model versions.
 
 Use `--script-out FILE` to save the spoken script with audio. Existing
 script/audio files are refused unless `--force` is passed; generation failures
 preserve previous audio. Artifact files are replaced on each run.
 
-## macOS say alternative
+## Native speech
 
 ```sh
-narrate --tts=native --verbatim 'Speak with the Mac voice.'
+narrate --tts=native --verbatim 'Speak with the platform voice.'
 narrate --tts=native -v '?'
 narrate --tts=native -v Samantha -r 180 -f report.md -o report.aiff
 ```
@@ -271,8 +274,8 @@ this CLI's current workflow. Narrate does not upload to SoundCloud.
 ## Privacy
 
 Source text goes to the configured AI provider unless `--verbatim` is used.
-OpenRouter speech receives the spoken script. Pocket receives the script on your
-configured DGX. Native speech runs locally.
+OpenRouter speech receives the spoken script. Remote Pocket receives the script
+on the configured host. Native speech runs locally.
 Scripts, audio and transcripts are kept in private local cache directories and
 remote job directories. Credentials are excluded from cache keys and manifests.
 
@@ -284,6 +287,5 @@ go vet ./...
 python3 -m unittest discover -s internal/pocket -p '*_test.py'
 ```
 
-Tests cover provider requests, native PCM conversion, output preservation,
-Pocket defaults, Spark resource gating/cleanup, transfer and FFmpeg commands.
-A live Pocket + Whisper + normalized MP3 run was verified on September 7, 2026.
+The test suite covers provider requests, native audio conversion, output
+preservation, remote job management, file transfer, and audio decoding.
