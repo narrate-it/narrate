@@ -2,6 +2,9 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,7 +35,14 @@ func TestStreamingIsOptIn(t *testing.T) {
 			t.Setenv("NARRATE_CONFIG", filepath.Join(dir, "missing"))
 			t.Setenv("NARRATE_CACHE_DIR", filepath.Join(dir, "cache"))
 			t.Setenv("NARRATE_TTS_BACKEND", "pocket")
-			t.Setenv("NARRATE_SPARK_URL", "http://spark.test")
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprint(w, `{ "available": {"cpuMillis":1000,"memoryMB":6144,"gpuCount":1} }`)
+			}))
+			t.Cleanup(srv.Close)
+			t.Setenv("NARRATE_SPARK_URL", srv.URL)
+			t.Setenv("NARRATE_REMOTE_HOST_PATH", "/srv/narrate")
+			t.Setenv("NARRATE_REMOTE_PYTHON", "/host/venv/bin/python")
+			t.Setenv("NARRATE_TTS_SPEED", "1")
 			t.Setenv("NARRATE_DGX_SSH_HOST", "user@host")
 			args := append([]string{"--verbatim"}, tc.args...)
 			args = append(args, "A complete sentence.")

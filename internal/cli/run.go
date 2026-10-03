@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -27,20 +26,21 @@ import (
 var errCanceled = errors.New("canceled")
 
 type options struct {
-	cfg          *config.Config
-	style        string
-	scriptOnly   bool
-	scriptOut    string
-	outputFile   string
-	fileFormat   string
-	verbatim     bool
-	minutes      int
-	artifactsDir string
-	resume       bool
-	progress     bool
-	stream       bool
-	force        bool
-	rate         int
+	voiceOverride bool
+	cfg           *config.Config
+	style         string
+	scriptOnly    bool
+	scriptOut     string
+	outputFile    string
+	fileFormat    string
+	verbatim      bool
+	minutes       int
+	artifactsDir  string
+	resume        bool
+	progress      bool
+	stream        bool
+	force         bool
+	rate          int
 }
 
 // execute runs the selected workflow with Ctrl-C cancellation.
@@ -96,15 +96,8 @@ func execute(stdin io.Reader, stdout, stderr io.Writer, src input.Source, o opti
 		script, err = rewriteScript(ctx, stderr, src, o)
 		if err != nil {
 			var unavailable *rewriteUnavailable
-			if !o.scriptOnly && o.cfg.TTS.Backend == "openrouter" && o.cfg.AI.Provider == "openrouter" && ctx.Err() == nil && errors.As(err, &unavailable) {
-				if runtime.GOOS != "darwin" {
-					return fmt.Errorf("OpenRouter rewrite unavailable; native fallback requires macOS: %w", err)
-				}
-				if o.fileFormat == "" && o.outputFile != "" && filepath.Ext(o.outputFile) == "" {
-					o.fileFormat = "MP3"
-				}
-				fmt.Fprintln(stderr, "narrate: OpenRouter rewrite unavailable; falling back to native speech with the original text")
-				o = nativeFallbackOptions(o)
+			if !o.scriptOnly && o.cfg.AI.Provider == "openrouter" && ctx.Err() == nil && errors.As(err, &unavailable) {
+				fmt.Fprintln(stderr, "narrate: OpenRouter rewrite unavailable; using original text with the configured speech order")
 				script = narration.JoinScript([]string{src.Text})
 			} else {
 				return err
@@ -127,14 +120,9 @@ func execute(stdin io.Reader, stdout, stderr io.Writer, src input.Source, o opti
 		return maybeWriteArtifacts(o, src.Text, script, 0, nil)
 	}
 
-	// Audio workflow.
-	if o.cfg.TTS.Backend == "openrouter" || o.cfg.TTS.Backend == "" {
-		return runPreferredAudio(ctx, stdout, stderr, src.Text, script, o)
-	}
-	if o.cfg.TTS.Backend == "pocket" {
-		return runPocketAudio(ctx, stdout, stderr, src.Text, script, o)
-	}
-	return runAudio(ctx, stdout, stderr, src.Text, script, o)
+	// Audio workflow tries configured backends in order.
+	return runBackendChain(ctx, stdout, stderr, src.Text, script, o)
+
 }
 
 // writeDest refuses existing files without --force, then writes atomically.
@@ -171,6 +159,7 @@ func maybeWriteArtifacts(o options, source, script string, durationSec float64, 
 		TTSBackend string        `json:"tts_backend,omitempty"`
 		Voice      string        `json:"voice,omitempty"`
 		Speed      float64       `json:"speed,omitempty"`
+		Device     string        `json:"device,omitempty"`
 		Prompt     string        `json:"prompt_version"`
 		Style      string        `json:"style"`
 		Verbatim   bool          `json:"verbatim"`
@@ -193,6 +182,9 @@ func maybeWriteArtifacts(o options, source, script string, durationSec float64, 
 		m.TTSBackend = o.cfg.TTS.Backend
 		m.Voice = o.cfg.TTS.Voice
 		m.Speed = o.cfg.TTS.Speed
+		if m.TTSBackend == "pocket" {
+			m.Device = o.cfg.TTS.Device
+		}
 		if m.TTSBackend == "pocket" && m.Voice == "" {
 			m.Voice = "michael"
 		}

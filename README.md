@@ -2,7 +2,7 @@
 
 Narrate turns documents into spoken scripts and audio with configurable AI
 rewriting and speech. By default, it tries a remote Pocket TTS backend, then
-OpenRouter, then the platform native voice. The order is configurable, and
+OpenRouter, then the native macOS voice. The order is configurable, and
 explicit backend selection is available when you want one renderer. Narrate also
 gives CLI coding agents concise, phase-based progress updates. Pass `-o FILE`
 to save a recording without playing it through the speakers.
@@ -171,9 +171,9 @@ order or omit backends you do not use. `--tts=auto` follows that order;
 A backend that is unavailable can be skipped. A local execution error or
 cancellation stops the run instead of silently switching backends.
 
-Set `tts.voices` by backend. Defaults are Pocket `michael`, OpenRouter
-`en_paul_neutral`, and the platform's native default voice. OpenRouter's voice
-must be supported by the selected speech model. Set `tts.model` or
+Set `tts.voices` by backend. Pocket defaults to `michael`, and native speech
+uses the macOS system default. OpenRouter requires a configured voice supported
+by the selected speech model. Set `tts.model` or
 `NARRATE_TTS_MODEL` to choose the OpenRouter speech model; it is separate from
 `ai.model` / `NARRATE_AI_MODEL` for rewriting. `OPENROUTER_API_KEY` can supply
 both OpenRouter requests; `tts.api_key` / `NARRATE_TTS_API_KEY` can provide a
@@ -201,7 +201,7 @@ generated the recording.
 Set `tts.speed` or `NARRATE_TTS_SPEED` for a persistent speech speed; the CLI
 flag takes precedence. The default is `1`, with a supported range of `0.5` to
 `2`. The adjustment applies to OpenRouter and native speech through `ffmpeg`
-and preserves pitch. Pocket requires speed `1`.
+and preserves pitch. Pocket also applies pacing after rendering; streaming requires speed `1`.
 
 ```sh
 narrate --speed=0.85 --verbatim 'Hello from Narrate.'

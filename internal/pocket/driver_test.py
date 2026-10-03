@@ -23,7 +23,7 @@ class PipelineTest(unittest.TestCase):
             script = 'First paragraph.\n\nSecond paragraph.'
             for name in ['render.py','transcribe.py','script.txt']:
                 (root/name).write_text(script)
-            manifest = {'complete':True,'script_sha256':hashlib.sha256(script.encode()).hexdigest(),
+            manifest = {'complete':True,'device':'cuda','script_sha256':hashlib.sha256(script.encode()).hexdigest(),
                         'paragraphs':[{'duration_seconds':2},{'duration_seconds':3}],
                         'duration_seconds':5.65,'gap_seconds':0.65}
             calls, commands, played = [], [], []
@@ -57,7 +57,7 @@ class PipelineTest(unittest.TestCase):
                     Path(args[-1]).write_text(data)
             cfg = dict(directory=temp,spark_url='http://remote.test',ssh_host='user@remote',host_path='/srv/narration',python_path='/host/cache/venv/bin/python',output_subdir='output',cache_subdir='cache',image='nvcr.io/nvidia/pytorch:26.02-py3',device='cuda',speed=1,connect_timeout_seconds=3,ssh_uid=1000,
                        voice='michael',gap_ms=650,resume=False,playback=streaming,format='MP3',output=str(root/'out.mp3'))
-            with patch.object(driver.urllib.request,'urlopen',side_effect=request), patch.object(driver.subprocess,'run',side_effect=command), patch.object(driver,'Playback',return_value=Player()) as player, patch.object(driver.time,'sleep'):
+            with patch.object(driver.urllib.request,'urlopen',side_effect=request), patch.object(driver.subprocess,'run',side_effect=command), patch.object(driver,'transfer',side_effect=command), patch.object(driver,'Playback',return_value=Player()) as player, patch.object(driver.time,'sleep'):
                 driver.run(cfg)
             self.assertEqual(calls[-1][0],'DELETE')
             self.assertEqual(len([c for c in commands if c[0]=='scp']),6 if streaming else 4)
@@ -99,3 +99,20 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(calls,['GET','POST','GET','DELETE'])
 
 if __name__ == '__main__': unittest.main()
+
+
+class TransferCancellationTest(unittest.TestCase):
+    def test_interrupt_terminates_transfer_group(self):
+        with patch.object(driver.subprocess, 'Popen') as popen, patch.object(driver.os, 'killpg') as kill:
+            child = popen.return_value
+            child.pid = 12345
+            child.wait.side_effect = [KeyboardInterrupt(), 0]
+            with self.assertRaises(KeyboardInterrupt):
+                driver.transfer(['scp', 'source', 'dest'])
+            kill.assert_called_once_with(12345, driver.signal.SIGTERM)
+            self.assertEqual(child.wait.call_count, 2)
+
+    def test_local_launch_error_is_not_remote_unavailability(self):
+        with patch.object(driver.subprocess, 'Popen', side_effect=OSError('local executable failure')):
+            with self.assertRaises(OSError):
+                driver.transfer(['scp', 'source', 'dest'])

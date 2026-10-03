@@ -45,7 +45,8 @@ Options:
   --speed=N              Pitch-preserving speed multiplier, 0.5–2 (default 1).
                           OpenRouter/native; lower values speak more slowly.
   --file-format=FMT       AIFF|WAVE|MP3 (or "?" to list available formats).
-  --tts=BACKEND           openrouter (default, native fallback) | pocket | native.
+  --tts=BACKEND           auto (ordered defaults) | pocket | openrouter | native
+                          or a comma-separated backend order.
   --script-only           Emit only the rewritten conversational script (text
                           mode; no audio, no TTS, works on all platforms).
   --script-out=FILE       Save the final spoken script to FILE.
@@ -157,9 +158,12 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		usageErr(stderr, fmt.Errorf("--style must be conversational, coach or agent-update, got %q", *style))
 		return ExitUsage
 	}
-	if *tts != "" && *tts != "native" && *tts != "pocket" && *tts != "openrouter" {
-		usageErr(stderr, fmt.Errorf("--tts must be openrouter, pocket or native"))
-		return ExitUsage
+	if *tts != "" {
+		selection := config.Config{TTS: config.TTSConfig{Backend: *tts, Backends: []string{"pocket", "openrouter", "native"}}}
+		if _, err := selection.BackendOrder(); err != nil {
+			usageErr(stderr, err)
+			return ExitUsage
+		}
 	}
 
 	if *scriptOnly {
@@ -202,8 +206,13 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if *rate > 0 {
 		cfg.Rate = *rate
 	}
-	if *stream && (*scriptOnly || *outputFile != "" || cfg.TTS.Backend != "pocket") {
-		usageErr(stderr, fmt.Errorf("--stream requires Pocket speaker playback; use --tts=pocket and omit --script-only and -o"))
+	order, orderErr := cfg.BackendOrder()
+	if orderErr != nil && !*scriptOnly {
+		usageErr(stderr, orderErr)
+		return ExitUsage
+	}
+	if *stream && (*scriptOnly || *outputFile != "" || len(order) != 1 || order[0] != "pocket" || cfg.TTS.Speed != 1) {
+		usageErr(stderr, fmt.Errorf("--stream requires Pocket speaker playback; use --tts=pocket --speed=1 and omit --script-only and -o"))
 		return ExitUsage
 	}
 	needAI := !*verbatim
@@ -213,14 +222,14 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return ExitUsage
 	}
 
-	if needAudio && cfg.TTS.Backend != "pocket" && *outputFile != "" && *fileFormat == "" {
+	if needAudio && *outputFile != "" && *fileFormat == "" {
 		ext := strings.ToLower(filepath.Ext(*outputFile))
 		if ext != "" && ext != ".mp3" && ext != ".aiff" && ext != ".aif" && ext != ".wav" {
 			usageErr(stderr, fmt.Errorf("speech output requires .mp3, .aiff, .aif or .wav"))
 			return ExitUsage
 		}
 	}
-	if needAudio && cfg.TTS.Backend == "openrouter" && cfg.AI.Provider == "openrouter" {
+	if needAudio && cfg.AI.Provider == "openrouter" && (len(order) > 1 || (len(order) == 1 && order[0] == "openrouter")) {
 		needAI = false // Missing/failed OpenRouter rewrite can read the source natively.
 	}
 	if err := cfg.Validate(needAI, needAudio); err != nil {
@@ -229,20 +238,21 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	opts := options{
-		cfg:          cfg,
-		style:        *style,
-		scriptOnly:   *scriptOnly,
-		scriptOut:    *scriptOut,
-		outputFile:   *outputFile,
-		fileFormat:   strings.ToUpper(*fileFormat),
-		verbatim:     *verbatim,
-		minutes:      *minutes,
-		artifactsDir: *artifacts,
-		resume:       *resume,
-		progress:     *progress,
-		stream:       *stream,
-		force:        *force,
-		rate:         *rate,
+		cfg:           cfg,
+		voiceOverride: *voice != "",
+		style:         *style,
+		scriptOnly:    *scriptOnly,
+		scriptOut:     *scriptOut,
+		outputFile:    *outputFile,
+		fileFormat:    strings.ToUpper(*fileFormat),
+		verbatim:      *verbatim,
+		minutes:       *minutes,
+		artifactsDir:  *artifacts,
+		resume:        *resume,
+		progress:      *progress,
+		stream:        *stream,
+		force:         *force,
+		rate:          *rate,
 	}
 
 	if err := execute(stdin, stdout, stderr, src, opts); err != nil {
@@ -281,39 +291,33 @@ func newFlagSet(stderr io.Writer) *flag.FlagSet {
 }
 
 func listVoices(stdout, stderr io.Writer, backend string) int {
-	if backend == "" {
-		cfg, _, err := config.Load()
-		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return ExitUsage
-		}
-		backend = cfg.TTS.Backend
+	cfg, _, err := config.Load()
+	if err != nil {
+		usageErr(stderr, err)
+		return ExitUsage
 	}
+	if backend != "" {
+		cfg.TTS.Backend = backend
+	}
+	order, err := cfg.BackendOrder()
+	if err != nil {
+		usageErr(stderr, err)
+		return ExitUsage
+	}
+	backend = order[0]
 	if backend == "native" {
-		return listNativeVoices(stdout, stderr)
-	}
-	if backend == "openrouter" || backend == "" {
-		fmt.Fprintln(stdout, "OpenRouter speech: set tts.model (or NARRATE_TTS_MODEL), set tts.voice (or NARRATE_TTS_VOICE) to a voice supported by your model. Native fallback uses the system default voice.")
+		text, err := runCapture("/usr/bin/say", "-v", "?")
+		if err != nil {
+			usageErr(stderr, err)
+			return ExitRuntime
+		}
+		fmt.Fprint(stdout, text)
 		return ExitOK
 	}
 	if backend == "pocket" {
-		fmt.Fprintln(stdout, "Pocket TTS default voice: michael (use -v NAME for another installed catalog voice)")
+		fmt.Fprintln(stdout, "Pocket TTS: michael (default); select a supported voice with --voice or tts.voices.pocket.")
 		return ExitOK
 	}
-	fmt.Fprintln(stderr, "narrate: unknown backend", backend)
-	return ExitUsage
-}
-
-func listNativeVoices(stdout, stderr io.Writer) int {
-	if runtime.GOOS != "darwin" {
-		fmt.Fprintf(stderr, "narrate: voice listing requires macOS; this platform is %s\n", runtime.GOOS)
-		return ExitRuntime
-	}
-	out, err := runCapture("/usr/bin/say", "-v", "?")
-	if err != nil {
-		fmt.Fprintln(stderr, "narrate: listing voices:", err)
-		return ExitRuntime
-	}
-	fmt.Fprint(stdout, out)
+	fmt.Fprintln(stdout, "OpenRouter: configure a speech model and its supported voice with tts.voices.openrouter; voice discovery makes no provider call.")
 	return ExitOK
 }

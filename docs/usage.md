@@ -61,7 +61,7 @@ evidence.
 `--speed=0.85` slows supported speech while preserving pitch. Valid values are
 `0.5`–`2`, with default `1`. Configure `tts.speed` or `NARRATE_TTS_SPEED` for
 persistent behavior; the flag takes precedence. Adjustment requires `ffmpeg`
-and applies to OpenRouter and native synthesis. Pocket requires speed `1`;
+and applies to Pocket, OpenRouter and native synthesis. Streaming requires speed `1`;
 `--rate` remains the native synthesis words-per-minute control.
 
 ## EXIT STATUS

@@ -22,14 +22,25 @@ the backend that generated the audio.
   selected explicitly.
 - **OpenRouter** requires an API key, a speech model, and a voice supported by
   that model. It also requires `ffmpeg` to decode provider audio.
-- **Native** uses the platform's speech system and its default voice unless a
+- **Native** uses macOS speech and its default voice unless a
   voice is configured.
 
-Voice settings are per backend in `tts.voices`. Defaults are Pocket `michael`,
-OpenRouter `en_paul_neutral`, and the platform native default. See
+Voice settings are per backend in `tts.voices`. Pocket defaults to `michael`;
+native speech defaults to the macOS system voice. OpenRouter requires a
+configured voice supported by the selected speech model. See
 [the example configuration](../examples/config.example.json) for remote
 connection settings and backend order.
 
 OpenRouter speech uses a bounded request and is not retried by the client.
 Provider timeouts can have uncertain billing. Do not treat backend fallback as
 a retry guarantee for requests that may already have reached a provider.
+
+## Verification
+
+Go tests cover configured order, per-backend settings, cancellation, explicit
+selection, text-only independence and local decoder failure. Python transport
+tests cover GPU resource requests, remote capacity gating, transfer cancellation
+and cleanup. A live CUDA render generated a decodable recording, with the model
+and generated speech tensor verified on CUDA. A separate unavailable-remote run
+selected OpenRouter and generated audio. These checks establish automated
+generation and transport behavior; they are not a human listening review.

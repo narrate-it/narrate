@@ -42,6 +42,7 @@ model = TTSModel.load_model()
 if args.device == "cuda" and not torch.cuda.is_available():
     raise RuntimeError("UNAVAILABLE: CUDA requested but torch.cuda.is_available() is false")
 model.to(args.device)
+print(f"DEVICE requested={args.device} model={next(model.parameters()).device}", flush=True)
 voice = args.voice
 state = model.get_state_for_audio_prompt(voice)
 sample_rate = model.sample_rate
@@ -64,7 +65,10 @@ for index, paragraph in enumerate(paragraphs):
         if rate != sample_rate or data.dtype != np.float32 or data.ndim != 1 or not data.size or not np.isfinite(data).all() or not np.any(data):
             raise RuntimeError(f"Invalid cached clip: {path}")
     else:
-        data = model.generate_audio(state, paragraph).detach().cpu().numpy()
+        generated = model.generate_audio(state, paragraph)
+        if args.device == "cuda" and generated.device.type != "cuda":
+            raise RuntimeError("UNAVAILABLE: requested CUDA but speech tensor is not on CUDA")
+        data = generated.detach().cpu().numpy()
         data = np.asarray(data, dtype=np.float32).reshape(-1)
         if not data.size or not np.isfinite(data).all():
             raise RuntimeError(f"Invalid audio in paragraph {index + 1}")

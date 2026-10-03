@@ -25,7 +25,7 @@ func TestOpenRouterMissingConfigFallsBack(t *testing.T) {
 	t.Setenv("OPENROUTER_API_KEY", "")
 	var stdout, stderr strings.Builder
 	dest := filepath.Join(dir, "fallback.aiff")
-	code := Run([]string{"--tts=openrouter", "--verbatim", "-o", dest, "Hello."}, strings.NewReader(""), &stdout, &stderr)
+	code := Run([]string{"--tts=openrouter,native", "--verbatim", "-o", dest, "Hello."}, strings.NewReader(""), &stdout, &stderr)
 	if code != ExitOK {
 		t.Fatalf("exit %d: %s", code, stderr.String())
 	}
@@ -33,7 +33,7 @@ func TestOpenRouterMissingConfigFallsBack(t *testing.T) {
 	if err != nil || len(data) < 100 || string(data[:4]) != "FORM" {
 		t.Fatalf("invalid fallback audio: %v", err)
 	}
-	if !strings.Contains(stderr.String(), "falling back to native") {
+	if !strings.Contains(stderr.String(), "trying native") {
 		t.Fatalf("missing fallback notice: %s", stderr.String())
 	}
 }
@@ -82,7 +82,7 @@ func TestOpenRouterSpeechAndFallback(t *testing.T) {
 			}))
 			defer srv.Close()
 			t.Setenv("NARRATE_CONFIG", filepath.Join(dir, "missing.json"))
-			t.Setenv("NARRATE_TTS_BACKEND", "openrouter")
+			t.Setenv("NARRATE_TTS_BACKEND", "openrouter,native")
 			t.Setenv("NARRATE_TTS_MODEL", "tts-test")
 			t.Setenv("NARRATE_TTS_API_KEY", "speech-test")
 			t.Setenv("NARRATE_TTS_BASE_URL", srv.URL)
@@ -112,7 +112,7 @@ func TestOpenRouterSpeechAndFallback(t *testing.T) {
 			if manifest.Speed != 0.85 {
 				t.Fatalf("speed lost on %s: %s", tc.backend, data)
 			}
-			if strings.Contains(stderr.String(), "falling back") != (tc.backend == "native") {
+			if strings.Contains(stderr.String(), "trying native") != (tc.backend == "native") {
 				t.Fatalf("wrong fallback notice: %s", stderr.String())
 			}
 			// Existing output must fail before another provider call.
@@ -129,7 +129,7 @@ func TestOpenRouterCanceledDoesNotFallback(t *testing.T) {
 	cancel()
 	var stdout, stderr strings.Builder
 	err := runPreferredAudio(ctx, &stdout, &stderr, "Hello.", "Hello.", options{cfg: &config.Config{TTS: config.TTSConfig{Backend: "openrouter"}}})
-	if err == nil || strings.Contains(stderr.String(), "falling back") {
+	if err == nil || strings.Contains(stderr.String(), "trying native") {
 		t.Fatalf("cancellation triggered fallback: %v %s", err, stderr.String())
 	}
 }
@@ -160,7 +160,7 @@ func TestOpenRouterRewriteFailureReadsSourceNatively(t *testing.T) {
 	}))
 	defer srv.Close()
 	t.Setenv("NARRATE_CONFIG", filepath.Join(dir, "missing.json"))
-	t.Setenv("NARRATE_TTS_BACKEND", "openrouter")
+	t.Setenv("NARRATE_TTS_BACKEND", "openrouter,native")
 	t.Setenv("NARRATE_AI_PROVIDER", "openrouter")
 	t.Setenv("NARRATE_AI_API_KEY", "test-key")
 	t.Setenv("NARRATE_AI_MODEL", "test-model")
@@ -169,7 +169,7 @@ func TestOpenRouterRewriteFailureReadsSourceNatively(t *testing.T) {
 	var stdout, stderr strings.Builder
 	dest := filepath.Join(dir, "fallback.aiff")
 	code := Run([]string{"-o", dest, "--script-out", filepath.Join(dir, "script.txt"), "Original text."}, strings.NewReader(""), &stdout, &stderr)
-	if code != ExitOK || calls != 1 || !strings.Contains(stderr.String(), "falling back") {
+	if code != ExitOK || calls != 1 || !strings.Contains(stderr.String(), "using original text") {
 		t.Fatalf("exit=%d calls=%d: %s", code, calls, stderr.String())
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "script.txt"))
