@@ -29,7 +29,10 @@ type AIConfig struct {
 }
 
 type TTSConfig struct {
-	Backend  string `json:"backend,omitempty"` // native | pocket
+	Backend  string `json:"backend,omitempty"` // native | openrouter | pocket
+	Model    string `json:"model,omitempty"`
+	APIKey   string `json:"api_key,omitempty"`
+	BaseURL  string `json:"base_url,omitempty"`
 	Voice    string `json:"voice,omitempty"`
 	SSHUID   int    `json:"ssh_uid,omitempty"`
 	SparkURL string `json:"spark_url,omitempty"`
@@ -43,7 +46,7 @@ type Source struct{ ConfigFile string }
 // environment overrides. Flags are applied by the CLI on top of this.
 func Load() (*Config, Source, error) {
 	cfg := &Config{
-		TTS:            TTSConfig{Backend: "pocket", SSHUID: 1000},
+		TTS:            TTSConfig{Backend: "openrouter", SSHUID: 1000},
 		ParagraphGapMs: 650,
 	}
 	src := Source{}
@@ -82,6 +85,21 @@ func Load() (*Config, Source, error) {
 	}
 	if v := os.Getenv("NARRATE_TTS_BACKEND"); v != "" {
 		cfg.TTS.Backend = v
+	}
+	if v := os.Getenv("NARRATE_TTS_MODEL"); v != "" {
+		cfg.TTS.Model = v
+	}
+	if v := os.Getenv("OPENROUTER_API_KEY"); v != "" {
+		cfg.TTS.APIKey = v
+	}
+	if v := os.Getenv("NARRATE_TTS_API_KEY"); v != "" {
+		cfg.TTS.APIKey = v
+	}
+	if cfg.TTS.APIKey == "" && cfg.AI.Provider == "openrouter" {
+		cfg.TTS.APIKey = cfg.AI.APIKey
+	}
+	if v := os.Getenv("NARRATE_TTS_BASE_URL"); v != "" {
+		cfg.TTS.BaseURL = v
 	}
 	if v := os.Getenv("NARRATE_TTS_VOICE"); v != "" {
 		cfg.TTS.Voice = v
@@ -147,6 +165,10 @@ func (c *Config) Validate(needAI, needAudio bool) error {
 		if runtime.GOOS != "darwin" {
 			return fmt.Errorf("tts backend \"native\" requires macOS /usr/bin/say; this platform (%s) is not supported for audio, use --script-only", runtime.GOOS)
 		}
+	case "openrouter":
+		if c.Rate != 0 {
+			return fmt.Errorf("--rate is only supported with --tts=native")
+		}
 	case "pocket", "":
 		if c.TTS.SparkURL == "" || c.TTS.SSHHost == "" {
 			return fmt.Errorf("Pocket TTS needs NARRATE_SPARK_URL and NARRATE_DGX_SSH_HOST (or tts.spark_url and tts.ssh_host in config); use --tts=native for macOS say")
@@ -156,7 +178,7 @@ func (c *Config) Validate(needAI, needAudio bool) error {
 		}
 
 	default:
-		return fmt.Errorf("unknown tts backend %q (want pocket or native)", c.TTS.Backend)
+		return fmt.Errorf("unknown tts backend %q (want openrouter, pocket, or native)", c.TTS.Backend)
 	}
 	return nil
 }
