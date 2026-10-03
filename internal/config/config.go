@@ -5,9 +5,11 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -29,14 +31,15 @@ type AIConfig struct {
 }
 
 type TTSConfig struct {
-	Backend  string `json:"backend,omitempty"` // native | openrouter | pocket
-	Model    string `json:"model,omitempty"`
-	APIKey   string `json:"api_key,omitempty"`
-	BaseURL  string `json:"base_url,omitempty"`
-	Voice    string `json:"voice,omitempty"`
-	SSHUID   int    `json:"ssh_uid,omitempty"`
-	SparkURL string `json:"spark_url,omitempty"`
-	SSHHost  string `json:"ssh_host,omitempty"`
+	Speed    float64 `json:"speed,omitempty"`   // pitch-preserving tempo multiplier for native/OpenRouter
+	Backend  string  `json:"backend,omitempty"` // native | openrouter | pocket
+	Model    string  `json:"model,omitempty"`
+	APIKey   string  `json:"api_key,omitempty"`
+	BaseURL  string  `json:"base_url,omitempty"`
+	Voice    string  `json:"voice,omitempty"`
+	SSHUID   int     `json:"ssh_uid,omitempty"`
+	SparkURL string  `json:"spark_url,omitempty"`
+	SSHHost  string  `json:"ssh_host,omitempty"`
 }
 
 // Source describes where configuration came from (for diagnostics).
@@ -46,7 +49,7 @@ type Source struct{ ConfigFile string }
 // environment overrides. Flags are applied by the CLI on top of this.
 func Load() (*Config, Source, error) {
 	cfg := &Config{
-		TTS:            TTSConfig{Backend: "openrouter", SSHUID: 1000},
+		TTS:            TTSConfig{Backend: "openrouter", SSHUID: 1000, Speed: 1},
 		ParagraphGapMs: 650,
 	}
 	src := Source{}
@@ -85,6 +88,13 @@ func Load() (*Config, Source, error) {
 	}
 	if v := os.Getenv("NARRATE_TTS_BACKEND"); v != "" {
 		cfg.TTS.Backend = v
+	}
+	if v := os.Getenv("NARRATE_TTS_SPEED"); v != "" {
+		speed, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return nil, src, fmt.Errorf("NARRATE_TTS_SPEED must be a number between 0.5 and 2")
+		}
+		cfg.TTS.Speed = speed
 	}
 	if v := os.Getenv("NARRATE_TTS_MODEL"); v != "" {
 		cfg.TTS.Model = v
@@ -157,6 +167,9 @@ func (c *Config) Validate(needAI, needAudio bool) error {
 	if !needAudio {
 		return nil
 	}
+	if math.IsNaN(c.TTS.Speed) || math.IsInf(c.TTS.Speed, 0) || c.TTS.Speed < 0.5 || c.TTS.Speed > 2 {
+		return fmt.Errorf("tts.speed / --speed must be between 0.5 and 2")
+	}
 	if c.ParagraphGapMs < 0 || c.ParagraphGapMs > 60000 {
 		return fmt.Errorf("paragraph_gap_ms must be between 0 and 60000")
 	}
@@ -170,6 +183,9 @@ func (c *Config) Validate(needAI, needAudio bool) error {
 			return fmt.Errorf("--rate is only supported with --tts=native")
 		}
 	case "pocket", "":
+		if c.TTS.Speed != 1 {
+			return fmt.Errorf("--speed is supported with OpenRouter/native only; use --speed=1 for Pocket")
+		}
 		if c.TTS.SparkURL == "" || c.TTS.SSHHost == "" {
 			return fmt.Errorf("Pocket TTS needs NARRATE_SPARK_URL and NARRATE_DGX_SSH_HOST (or tts.spark_url and tts.ssh_host in config); use --tts=native for macOS say")
 		}

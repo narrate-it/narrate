@@ -196,7 +196,10 @@ func runAudio(ctx context.Context, stdout, stderr io.Writer, source, script stri
 // Text goes through stdin; output is explicitly big-endian PCM AIFF.
 func synthParagraph(ctx context.Context, stderr io.Writer, text, outAiff string, o options) error {
 	if o.cfg.TTS.Backend == "openrouter" || o.cfg.TTS.Backend == "" {
-		return synthOpenRouterParagraph(ctx, text, outAiff, o)
+		if err := synthOpenRouterParagraph(ctx, text, outAiff, o); err != nil {
+			return err
+		}
+		return adjustSpeechSpeed(ctx, outAiff, o.cfg.TTS.Speed)
 	}
 	args := []string{}
 	if o.cfg.TTS.Voice != "" {
@@ -210,7 +213,10 @@ func synthParagraph(ctx context.Context, stderr io.Writer, text, outAiff string,
 	cmd.Stdin = strings.NewReader(text)
 	// Send text through stdin to avoid argument limits and option interpretation.
 	cmd.Stderr = stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	return adjustSpeechSpeed(ctx, outAiff, o.cfg.TTS.Speed)
 }
 
 // playFile plays a completed audio file with afplay (argument array).
@@ -288,4 +294,32 @@ func runCapture(name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
 	out, err := cmd.Output()
 	return string(out), err
+}
+
+// adjustSpeechSpeed changes tempo before clip measurement/assembly, preserving
+// pitch, chapter offsets and the configured silence between paragraphs.
+func adjustSpeechSpeed(ctx context.Context, clip string, speed float64) error {
+	if speed == 1 || speed == 0 {
+		return nil
+	} // zero only in internal legacy option literals
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	temp, err := os.CreateTemp(filepath.Dir(clip), ".narrate-tempo-*.aiff")
+	if err != nil {
+		return fmt.Errorf("creating tempo clip: %w", err)
+	}
+	if err := temp.Close(); err != nil {
+		os.Remove(temp.Name())
+		return err
+	}
+	defer os.Remove(temp.Name())
+	cmd := exec.CommandContext(ctx, "ffmpeg", "-nostdin", "-v", "error", "-y", "-i", clip, "-af", fmt.Sprintf("atempo=%g", speed), "-c:a", "pcm_s16be", "-f", "aiff", temp.Name())
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("adjusting speech speed (requires ffmpeg): %w", err)
+	}
+	if _, _, err := probeAIFF(temp.Name()); err != nil {
+		return fmt.Errorf("validating tempo clip: %w", err)
+	}
+	return os.Rename(temp.Name(), clip)
 }

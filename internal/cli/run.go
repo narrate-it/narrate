@@ -170,6 +170,7 @@ func maybeWriteArtifacts(o options, source, script string, durationSec float64, 
 		Version    string        `json:"version"`
 		TTSBackend string        `json:"tts_backend,omitempty"`
 		Voice      string        `json:"voice,omitempty"`
+		Speed      float64       `json:"speed,omitempty"`
 		Prompt     string        `json:"prompt_version"`
 		Style      string        `json:"style"`
 		Verbatim   bool          `json:"verbatim"`
@@ -191,6 +192,7 @@ func maybeWriteArtifacts(o options, source, script string, durationSec float64, 
 	if !o.scriptOnly {
 		m.TTSBackend = o.cfg.TTS.Backend
 		m.Voice = o.cfg.TTS.Voice
+		m.Speed = o.cfg.TTS.Speed
 		if m.TTSBackend == "pocket" && m.Voice == "" {
 			m.Voice = "michael"
 		}

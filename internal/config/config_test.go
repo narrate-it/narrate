@@ -121,3 +121,34 @@ func TestPocketValidationRemainsUnchanged(t *testing.T) {
 		t.Fatal("Pocket silently accepted native rate")
 	}
 }
+
+func TestSpeechSpeedConfiguration(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(path, []byte(`{"tts":{"speed":0.85}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("NARRATE_CONFIG", path)
+	t.Setenv("NARRATE_TTS_SPEED", "")
+	cfg, _, err := Load()
+	if err != nil || cfg.TTS.Speed != 0.85 {
+		t.Fatalf("config speed: %v %v", cfg, err)
+	}
+	t.Setenv("NARRATE_TTS_SPEED", "0.9")
+	cfg, _, err = Load()
+	if err != nil || cfg.TTS.Speed != 0.9 {
+		t.Fatalf("env speed: %v %v", cfg, err)
+	}
+	for _, value := range []string{"bad", "NaN", "+Inf", "0.49", "2.1", "0"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("NARRATE_TTS_SPEED", value)
+			cfg, _, err := Load()
+			if err == nil {
+				err = cfg.Validate(false, true)
+			}
+			if err == nil {
+				t.Fatal("invalid speed accepted")
+			}
+		})
+	}
+}

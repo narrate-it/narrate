@@ -42,3 +42,17 @@ Verification:
 The implementation is installed locally for verification. It has not been
 published as a CLI release; a future package or launcher update may replace the
 local build until the change is included in a release.
+
+## Speech pacing (2026-10-02)
+
+`--speed`, `NARRATE_TTS_SPEED` and `tts.speed` control local pitch-preserving
+speech tempo for OpenRouter and native synthesis, including provider fallback.
+Global default: 1. Supported range: 0.5–2. The user's local preference is 0.85.
+Tempo adjustment is applied to each decoded clip before duration measurement,
+chapter assembly and atomic output publication. Paragraph gaps are unchanged;
+artifact manifests include the speed used. Pocket requires speed 1.
+
+Regression tests measure a 440 Hz fixture's pitch and duration after slowing,
+verify flag precedence and invalid values, and exercise OpenRouter success and
+native fallback with the same speed. Native synthesis with `--speed=0.85` also
+runs in the CLI tests. Full Go tests and vet are required before local install.
