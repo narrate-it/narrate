@@ -1,7 +1,8 @@
 # narrate
 
 Narrate turns documents into spoken scripts and audio with configurable
-AI rewriting, Pocket TTS on a DGX, or local macOS `say`. It also gives CLI
+AI rewriting and speech through OpenRouter, with local macOS `say` fallback
+and an explicit Pocket TTS backend on a DGX. It also gives CLI
 coding agents concise, phase-based progress updates. When you pass `-o FILE`,
 Narrate saves the recording without playing it through the speakers.
 
@@ -34,7 +35,7 @@ To narrate a pathname literally, pipe it through stdin.
 
 Use `-o FILE` to write an audio file without speaker playback.
 
-`--verbatim` skips AI rewriting and needs no AI key. `--script-only` skips all
+`--verbatim` skips AI rewriting; OpenRouter speech still needs a key. `--script-only` skips all
 audio dependencies. Options go before positional text; use `--` before text
 beginning with a dash.
 
@@ -158,9 +159,30 @@ file. Precedence: flags, environment, config, defaults.
 ```sh
 export OPENROUTER_API_KEY='your-key'
 export NARRATE_AI_MODEL='openrouter/auto'
-export NARRATE_SPARK_URL='http://YOUR-DGX:8080'
-export NARRATE_DGX_SSH_HOST='USER@YOUR-DGX'
+export NARRATE_TTS_MODEL='mistralai/voxtral-mini-tts-2603'
+export NARRATE_TTS_VOICE='en_paul_neutral'
 ```
+
+OpenRouter is the default speech backend. Set `tts.model` or `NARRATE_TTS_MODEL`
+to a speech model, separate from `ai.model` / `NARRATE_AI_MODEL` for rewriting.
+Set `tts.voice` or `NARRATE_TTS_VOICE` to a voice supported by your model.
+Speech uses [OpenRouter's audio speech endpoint](https://openrouter.ai/docs/guides/overview/multimodal/tts).
+`OPENROUTER_API_KEY` supplies both calls; `tts.api_key` / `NARRATE_TTS_API_KEY`
+can supply a separate speech credential. OpenAI credentials are never used for
+OpenRouter speech. OpenRouter audio decoding requires `ffmpeg`.
+
+On macOS, missing speech settings or a failed speech request falls back to the
+system default `say` voice, with a notice on stderr. A failed OpenRouter rewrite
+in audio mode reads the original text with native speech. `--script-only` still
+reports rewrite errors. Cancellation and local output failures are not retried
+through another backend. Speech requests have a 60-second timeout and are not
+retried; a timeout may still have incurred provider charges. The manifest records
+the backend that actually generated the recording. There is no global default
+speech model, and OpenRouter speech is not cached by `--resume`.
+
+Use `--tts=native` to explicitly select macOS speech, or `--tts=pocket` to use
+the DGX. Pocket requires `NARRATE_SPARK_URL` and `NARRATE_DGX_SSH_HOST` (or
+`tts.spark_url` and `tts.ssh_host` in config).
 
 Pocket submits a tracked Spark pod using the existing DGX environment:
 `nvcr.io/nvidia/pytorch:26.02-py3`, `/host/vibevoice-cache/venv/bin/python`,
@@ -179,15 +201,17 @@ Direct OpenAI remains available with `NARRATE_AI_PROVIDER=openai`,
 
 Other environment options: `NARRATE_AI_BASE_URL`, `NARRATE_AI_API_KEY`
 (overrides the provider-specific key), `NARRATE_TTS_BACKEND`,
-`NARRATE_TTS_VOICE`, and `NARRATE_CACHE_DIR`.
+`NARRATE_TTS_VOICE`, `NARRATE_TTS_MODEL`, `NARRATE_TTS_API_KEY`,
+`NARRATE_TTS_BASE_URL` (official endpoint or loopback test server), and `NARRATE_CACHE_DIR`.
 
 ## Audio and verification
 
-Without `-o`, Narrate finishes synthesis, Whisper verification and encoding
+Without `-o`, Narrate finishes synthesis and encoding (plus Whisper verification
+for Pocket)
 before playing the complete recording. Streaming is **opt-in**:
 
 ```sh
-narrate --stream -f report.md
+narrate --tts=pocket --stream -f report.md
 ```
 
 `--stream` starts speaker playback with the first completed paragraph while
@@ -195,7 +219,7 @@ Pocket generates later paragraphs. Early playback uses peak-limited raw clips
 before Whisper verification and final loudness normalization. Ctrl-C stops
 playback and cancels the Spark job. AI rewriting still completes before synthesis.
 Use `-o` to save a complete recording without playback; `--stream` cannot be
-combined with `-o`, `--script-only`, or `--tts=native`.
+combined with `-o` or `--script-only`, and requires `--tts=pocket`.
 
 Pocket defaults to MP3: mono 44.1 kHz, 128 kbps, paragraph chapters and
 loudness normalization targeting -18 LUFS / -1.5 dBTP. Natural runtime is
@@ -227,15 +251,16 @@ narrate --tts=native -v '?'
 narrate --tts=native -v Samantha -r 180 -f report.md -o report.aiff
 ```
 
-Native speech supports AIFF/WAV and speaking rate. Pocket uses `-v michael`
-by default; `-r` is rejected for Pocket. Duration targeting (`--minutes`),
+Native speech supports AIFF/WAV and speaking rate; MP3 output requires `ffmpeg`. Pocket uses `-v michael`
+by default; `-r` is rejected for Pocket and OpenRouter. Duration targeting (`--minutes`),
 network/device/highlighting switches and automatic publication are outside
 this CLI's current workflow. Narrate does not upload to SoundCloud.
 
 ## Privacy
 
 Source text goes to the configured AI provider unless `--verbatim` is used.
-Pocket receives the script on your configured DGX. Native speech runs locally.
+OpenRouter speech receives the spoken script. Pocket receives the script on your
+configured DGX. Native speech runs locally.
 Scripts, audio and transcripts are kept in private local cache directories and
 remote job directories. Credentials are excluded from cache keys and manifests.
 

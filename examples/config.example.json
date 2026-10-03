@@ -4,11 +4,12 @@
     "model": "your-chosen-model-id"
   },
   "tts": {
-    "backend": "pocket",
-    "voice": "michael",
+    "backend": "openrouter",
+    "voice": "en_paul_neutral",
     "spark_url": "http://YOUR-DGX:8080",
     "ssh_host": "USER@YOUR-DGX",
-    "ssh_uid": 1000
+    "ssh_uid": 1000,
+    "model": "mistralai/voxtral-mini-tts-2603"
   },
   "paragraph_gap_ms": 650
 }

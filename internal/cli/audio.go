@@ -21,7 +21,7 @@ type ChapterInfo struct {
 	StartSec      float64 `json:"start_seconds"`
 }
 
-// runAudio synthesizes the script with the native macOS backend, assembles
+// runAudio synthesizes the script with the selected backend, assembles
 // the container, and plays or saves it.
 func runAudio(ctx context.Context, stdout, stderr io.Writer, source, script string, o options) error {
 	// Speech synthesis via /usr/bin/say writes AIFF directly per paragraph.
@@ -50,6 +50,8 @@ func runAudio(ctx context.Context, stdout, stderr io.Writer, source, script stri
 		ext := ".aiff"
 		if format == "WAVE" {
 			ext = ".wav"
+		} else if format == "MP3" {
+			ext = ".mp3"
 		}
 		finalFile = filepath.Join(workDir, "out"+ext)
 	}
@@ -148,6 +150,20 @@ func runAudio(ctx context.Context, stdout, stderr io.Writer, source, script stri
 	if writeErr != nil {
 		return writeErr
 	}
+	if format == "MP3" {
+		encoded := filepath.Join(workDir, "encoded.mp3")
+		cmd := exec.CommandContext(ctx, "ffmpeg", "-nostdin", "-v", "error", "-i", f.Name(), "-c:a", "libmp3lame", "-b:a", "128k", encoded)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("encoding MP3: %w", err)
+		}
+		data, err := os.ReadFile(encoded)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(f.Name(), data, 0o600); err != nil {
+			return err
+		}
+	}
 	if err := publishTemp(f.Name(), finalFile, o.force); err != nil {
 		return err
 	}
@@ -179,6 +195,9 @@ func runAudio(ctx context.Context, stdout, stderr io.Writer, source, script stri
 // synthParagraph invokes /usr/bin/say with argument arrays (never shell).
 // Text goes through stdin; output is explicitly big-endian PCM AIFF.
 func synthParagraph(ctx context.Context, stderr io.Writer, text, outAiff string, o options) error {
+	if o.cfg.TTS.Backend == "openrouter" || o.cfg.TTS.Backend == "" {
+		return synthOpenRouterParagraph(ctx, text, outAiff, o)
+	}
 	args := []string{}
 	if o.cfg.TTS.Voice != "" {
 		args = append(args, "-v", o.cfg.TTS.Voice)
@@ -224,6 +243,9 @@ func resolveOutput(out, format string) (string, string) {
 	if out == "" {
 		return "", "AIFF"
 	}
+	if format == "MP3" {
+		return out, "MP3"
+	}
 	if format == "WAVE" || format == "WAV" {
 		return out, "WAVE"
 	}
@@ -231,6 +253,8 @@ func resolveOutput(out, format string) (string, string) {
 		return out, "AIFF"
 	}
 	switch strings.ToLower(filepath.Ext(out)) {
+	case ".mp3":
+		return out, "MP3"
 	case ".wav":
 		return out, "WAVE"
 	case ".aiff", ".aif":
