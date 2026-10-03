@@ -89,7 +89,7 @@ func TestInvalidSpeechSpeedFailsBeforeGeneration(t *testing.T) {
 	for _, speed := range []string{"0", "0.49", "2.01", "NaN", "Inf"} {
 		t.Run(speed, func(t *testing.T) {
 			var stdout, stderr strings.Builder
-			code := Run([]string{"--verbatim", "--speed=" + speed, "Hello."}, strings.NewReader(""), &stdout, &stderr)
+			code := Run([]string{"--verbatim", "--speed=" + speed, "-o", filepath.Join(t.TempDir(), "speech.mp3"), "Hello."}, strings.NewReader(""), &stdout, &stderr)
 			if code != ExitUsage || !strings.Contains(stderr.String(), "between 0.5 and 2") {
 				t.Fatalf("exit=%d: %s", code, stderr.String())
 			}
