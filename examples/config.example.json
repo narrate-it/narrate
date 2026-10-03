@@ -4,13 +4,23 @@
     "model": "your-chosen-model-id"
   },
   "tts": {
-    "backend": "openrouter",
-    "voice": "en_paul_neutral",
-    "spark_url": "http://YOUR-DGX:8080",
-    "ssh_host": "USER@YOUR-DGX",
-    "ssh_uid": 1000,
-    "model": "mistralai/voxtral-mini-tts-2603",
-    "speed": 1
+    "backend": "auto",
+    "backends": ["pocket", "openrouter", "native"],
+    "voices": {
+      "pocket": "michael",
+      "openrouter": "en_paul_neutral"
+    },
+    "model": "your-openrouter-speech-model-id",
+    "speed": 1,
+    "device": "cuda",
+    "spark_url": "http://spark.example:8080",
+    "ssh_host": "user@gpu.example",
+    "remote_host_path": "/srv/narrate",
+    "remote_python": "/host/venv/bin/python",
+    "remote_output_subdir": "output",
+    "remote_cache_subdir": "cache",
+    "remote_image": "nvcr.io/nvidia/pytorch:26.02-py3",
+    "connect_timeout_seconds": 3
   },
   "paragraph_gap_ms": 650
 }

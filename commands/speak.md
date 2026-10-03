@@ -30,12 +30,11 @@ using a safely quoted heredoc or a temporary file, never shell interpolation.
 Put flags before positional text.
 
 For a coding update, compose the spoken text yourself and use `--verbatim`
-to avoid an unnecessary AI request. On macOS, when the user has not configured
-or requested a backend, use `--tts=native --verbatim`: it needs no API key,
-DGX, or paid service. For example:
+to avoid an unnecessary AI rewriting request. Honor Narrate's configured backend
+order unless the user requests a specific backend. For example:
 
 ```sh
-sh "${CLAUDE_PLUGIN_ROOT}/scripts/narrate.sh" --tts=native --verbatim <<'NARRATE_TEXT'
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/narrate.sh" --verbatim <<'NARRATE_TEXT'
 The requested change is ready for review.
 NARRATE_TEXT
 ```
@@ -45,9 +44,10 @@ user wants exact wording. AI rewriting requires the configured provider's
 key; explain that document text will be sent to that provider before using
 rewriting unless the user already requested that workflow.
 
-Honor the user's existing backend configuration. Pocket requires a configured
-Spark/DGX endpoint and SSH access; do not invent endpoints or credentials.
-On platforms without macOS playback, save audio using `-o` with an absolute
+Honor the user's existing backend configuration. Remote Pocket speech requires
+a configured Spark-compatible endpoint and SSH access; do not invent endpoints
+or credentials.
+When audio playback is unavailable, save audio using `-o` with an absolute
 path and report the resulting file. Native audio output supports AIFF/WAV;
 Pocket also supports MP3. Do not overwrite files without authorization.
 
