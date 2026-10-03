@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/narrate-it/narrate/speech/openrouter"
@@ -32,19 +32,7 @@ func runPreferredAudio(ctx context.Context, stdout, stderr io.Writer, source, sc
 	if o.fileFormat == "" && (o.outputFile != "" && filepath.Ext(o.outputFile) == "") {
 		o.fileFormat = "MP3"
 	}
-	err := runAudio(ctx, stdout, stderr, source, script, o)
-	if err == nil || ctx.Err() != nil {
-		return err
-	}
-	var unavailable *speechUnavailable
-	if !errors.As(err, &unavailable) {
-		return err
-	}
-	if runtime.GOOS != "darwin" {
-		return fmt.Errorf("OpenRouter speech unavailable; native fallback requires macOS: %w", err)
-	}
-	fmt.Fprintf(stderr, "narrate: OpenRouter speech unavailable (%s); falling back to native macOS speech\n", unavailable.reason)
-	return runAudio(ctx, stdout, stderr, source, script, nativeFallbackOptions(o))
+	return runAudio(ctx, stdout, stderr, source, script, o)
 }
 
 func synthOpenRouterParagraph(ctx context.Context, text, outAIFF string, o options) error {
@@ -70,6 +58,21 @@ func synthOpenRouterParagraph(ctx context.Context, text, outAIFF string, o optio
 			}
 			return &speechUnavailable{reason}
 		}
+		check := exec.CommandContext(ctx, ffmpeg, "-nostdin", "-v", "error", "-i", "pipe:0", "-f", "null", "-")
+		check.Stdin = bytes.NewReader(result.Audio)
+		var diagnostics bytes.Buffer
+		check.Stderr = &diagnostics
+		if err := check.Run(); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			for _, problem := range []string{"Invalid data found", "Failed to read frame size", "Header missing", "Error while decoding", "Could not find codec parameters"} {
+				if strings.Contains(diagnostics.String(), problem) {
+					return &speechUnavailable{"provider returned invalid audio"}
+				}
+			}
+			return fmt.Errorf("validating OpenRouter audio: %w", err)
+		}
 		mp3 := fmt.Sprintf("%s.%d.mp3", outAIFF, i)
 		if err := os.WriteFile(mp3, result.Audio, 0o600); err != nil {
 			return fmt.Errorf("saving OpenRouter clip: %w", err)
@@ -77,7 +80,7 @@ func synthOpenRouterParagraph(ctx context.Context, text, outAIFF string, o optio
 		raw := fmt.Sprintf("%s.%d.pcm", outAIFF, i)
 		cmd := exec.CommandContext(ctx, ffmpeg, "-nostdin", "-v", "error", "-i", mp3, "-ar", "22050", "-ac", "1", "-f", "s16be", raw)
 		if err := cmd.Run(); err != nil {
-			return &speechUnavailable{"provider audio could not be decoded"}
+			return fmt.Errorf("converting OpenRouter audio: %w", err)
 		}
 		info, err := os.Stat(raw)
 		if err != nil {

@@ -31,6 +31,16 @@ type AIConfig struct {
 }
 
 type TTSConfig struct {
+	Backends              []string          `json:"backends,omitempty"`
+	Voices                map[string]string `json:"voices,omitempty"`
+	Device                string            `json:"device,omitempty"`
+	RemoteHostPath        string            `json:"remote_host_path,omitempty"`
+	RemotePython          string            `json:"remote_python,omitempty"`
+	RemoteOutputSubdir    string            `json:"remote_output_subdir,omitempty"`
+	RemoteCacheSubdir     string            `json:"remote_cache_subdir,omitempty"`
+	RemoteImage           string            `json:"remote_image,omitempty"`
+	ConnectTimeoutSeconds int               `json:"connect_timeout_seconds,omitempty"`
+
 	Speed    float64 `json:"speed,omitempty"`   // pitch-preserving tempo multiplier for native/OpenRouter
 	Backend  string  `json:"backend,omitempty"` // native | openrouter | pocket
 	Model    string  `json:"model,omitempty"`
@@ -49,7 +59,7 @@ type Source struct{ ConfigFile string }
 // environment overrides. Flags are applied by the CLI on top of this.
 func Load() (*Config, Source, error) {
 	cfg := &Config{
-		TTS:            TTSConfig{Backend: "openrouter", SSHUID: 1000, Speed: 1},
+		TTS:            TTSConfig{Backend: "auto", Backends: []string{"pocket", "openrouter", "native"}, Device: "cuda", SSHUID: 1000, Speed: 1, RemoteOutputSubdir: "output", RemoteCacheSubdir: "cache", RemoteImage: "nvcr.io/nvidia/pytorch:26.02-py3", ConnectTimeoutSeconds: 3},
 		ParagraphGapMs: 650,
 	}
 	src := Source{}
@@ -120,6 +130,22 @@ func Load() (*Config, Source, error) {
 	if v := os.Getenv("NARRATE_DGX_SSH_HOST"); v != "" {
 		cfg.TTS.SSHHost = v
 	}
+	for key, dest := range map[string]*string{
+		"NARRATE_REMOTE_SSH_HOST":      &cfg.TTS.SSHHost,
+		"NARRATE_TTS_DEVICE":           &cfg.TTS.Device,
+		"NARRATE_REMOTE_HOST_PATH":     &cfg.TTS.RemoteHostPath,
+		"NARRATE_REMOTE_PYTHON":        &cfg.TTS.RemotePython,
+		"NARRATE_REMOTE_OUTPUT_SUBDIR": &cfg.TTS.RemoteOutputSubdir,
+		"NARRATE_REMOTE_CACHE_SUBDIR":  &cfg.TTS.RemoteCacheSubdir,
+		"NARRATE_REMOTE_IMAGE":         &cfg.TTS.RemoteImage,
+	} {
+		if v := os.Getenv(key); v != "" {
+			*dest = v
+		}
+	}
+	if v := os.Getenv("NARRATE_TTS_BACKENDS"); v != "" {
+		cfg.TTS.Backends = strings.Split(v, ",")
+	}
 	if v := os.Getenv("NARRATE_CACHE_DIR"); v != "" {
 		cfg.CacheDir = v
 	}
@@ -173,28 +199,46 @@ func (c *Config) Validate(needAI, needAudio bool) error {
 	if c.ParagraphGapMs < 0 || c.ParagraphGapMs > 60000 {
 		return fmt.Errorf("paragraph_gap_ms must be between 0 and 60000")
 	}
-	switch c.TTS.Backend {
-	case "native":
-		if runtime.GOOS != "darwin" {
-			return fmt.Errorf("tts backend \"native\" requires macOS /usr/bin/say; this platform (%s) is not supported for audio, use --script-only", runtime.GOOS)
-		}
-	case "openrouter":
-		if c.Rate != 0 {
-			return fmt.Errorf("--rate is only supported with --tts=native")
-		}
-	case "pocket", "":
-		if c.TTS.Speed != 1 {
-			return fmt.Errorf("--speed is supported with OpenRouter/native only; use --speed=1 for Pocket")
-		}
-		if c.TTS.SparkURL == "" || c.TTS.SSHHost == "" {
-			return fmt.Errorf("Pocket TTS needs NARRATE_SPARK_URL and NARRATE_DGX_SSH_HOST (or tts.spark_url and tts.ssh_host in config); use --tts=native for macOS say")
-		}
-		if c.Rate != 0 {
-			return fmt.Errorf("--rate is only supported with --tts=native")
-		}
-
-	default:
-		return fmt.Errorf("unknown tts backend %q (want openrouter, pocket, or native)", c.TTS.Backend)
+	order, err := c.BackendOrder()
+	if err != nil {
+		return err
+	}
+	if c.Rate != 0 && (len(order) != 1 || order[0] != "native") {
+		return fmt.Errorf("--rate requires a single native backend; use --speed for a backend chain")
+	}
+	if c.TTS.Device != "cuda" && c.TTS.Device != "cpu" {
+		return fmt.Errorf("tts.device must be cuda or cpu")
+	}
+	if c.TTS.ConnectTimeoutSeconds < 1 || c.TTS.ConnectTimeoutSeconds > 60 {
+		return fmt.Errorf("tts.connect_timeout_seconds must be between 1 and 60")
+	}
+	if len(order) == 1 && order[0] == "native" && runtime.GOOS != "darwin" {
+		return fmt.Errorf("native speech requires macOS; use another backend or --script-only")
 	}
 	return nil
+}
+
+// BackendOrder resolves an explicit backend or the configurable ordered defaults.
+func (c *Config) BackendOrder() ([]string, error) {
+	selected := c.TTS.Backends
+	if c.TTS.Backend != "" && c.TTS.Backend != "auto" {
+		selected = strings.Split(c.TTS.Backend, ",")
+	}
+	if len(selected) == 0 {
+		return nil, fmt.Errorf("tts.backends must contain at least one backend")
+	}
+	order := make([]string, 0, len(selected))
+	seen := make(map[string]bool)
+	for _, value := range selected {
+		name := strings.TrimSpace(value)
+		if name != "pocket" && name != "openrouter" && name != "native" {
+			return nil, fmt.Errorf("unknown speech backend %q (want pocket, openrouter or native)", name)
+		}
+		if seen[name] {
+			return nil, fmt.Errorf("duplicate speech backend %q", name)
+		}
+		seen[name] = true
+		order = append(order, name)
+	}
+	return order, nil
 }

@@ -108,6 +108,7 @@ func defaults(cfg *Config) {
 }
 
 type Result struct {
+	Device    string    `json:"device"`
 	Duration  float64   `json:"duration"`
 	Starts    []float64 `json:"starts"`
 	Directory string
@@ -123,6 +124,9 @@ func Render(ctx context.Context, cfg Config, script, cacheDir string, stderr io.
 	}
 	if cfg.Device != "cuda" && cfg.Device != "cpu" {
 		return Result{}, fmt.Errorf("unsupported Pocket device %q", cfg.Device)
+	}
+	if cfg.Playback && cfg.Speed != 1 {
+		return Result{}, fmt.Errorf("Pocket streaming requires speed 1")
 	}
 	if cfg.Speed <= 0 {
 		return Result{}, fmt.Errorf("Pocket speed must be greater than zero")

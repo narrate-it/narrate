@@ -18,6 +18,24 @@ import wave
 from playback import Playback
 
 
+def transfer(command, timeout=300):
+    # Keep SCP and its SSH children in one cancellable local process group.
+    child = subprocess.Popen(command, stdin=subprocess.DEVNULL, start_new_session=True)
+    try:
+        code = child.wait(timeout=timeout)
+    except BaseException:
+        try: os.killpg(child.pid, signal.SIGTERM)
+        except ProcessLookupError: pass
+        try: child.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            try: os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError: pass
+            child.wait()
+        raise
+    if code:
+        raise subprocess.CalledProcessError(code, command)
+
+
 def run(cfg):
     player = Playback(cfg['gap_ms']) if cfg.get('playback') else None
     try:
@@ -78,11 +96,15 @@ def produce(cfg, player):
         def download(filename):
             dest = root / (filename + '.partial')
             try:
-                subprocess.run(['scp','-q','-o','BatchMode=yes','-o','ConnectTimeout=10',
+                transfer(['scp','-q','-o','BatchMode=yes','-o','ConnectTimeout=10',
                                 cfg['ssh_host'] + ':' + cfg['host_path'].rstrip('/') + '/' + cfg['output_subdir'].strip('/') + '/' + name + '/' + filename,
-                                str(dest)], check=True, timeout=300)
-            except (subprocess.SubprocessError, OSError) as exc:
-                raise RuntimeError('UNAVAILABLE: remote artifact transfer failed') from exc
+                                str(dest)], timeout=300)
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError('UNAVAILABLE: remote artifact transfer timed out') from exc
+            except subprocess.CalledProcessError as exc:
+                if exc.returncode == 255:
+                    raise RuntimeError('UNAVAILABLE: remote SSH connection failed') from exc
+                raise
             dest.replace(root / filename)
             return root / filename
 
@@ -94,8 +116,8 @@ def produce(cfg, player):
         render_started = False
         submitted = False
         try:
+            submitted = True  # The named job may exist even if the response is interrupted.
             api('POST', '/api/v1/pods', pod)
-            submitted = True
             deadline = time.monotonic() + 7200
             emit('Pocket TTS + Whisper job ' + name)
             while True:
@@ -107,7 +129,9 @@ def produce(cfg, player):
                             logs = response.read().decode(errors='replace')
                     except urllib.error.HTTPError as exc:
                         if exc.code != 404 or job_status == 'completed':
-                            raise
+                            raise RuntimeError('UNAVAILABLE: remote job logs unavailable') from exc
+                    except (urllib.error.URLError, TimeoutError) as exc:
+                        raise RuntimeError('UNAVAILABLE: remote connection lost') from exc
                 match = re.search(r'START paragraphs=(\d+)', logs)
                 if match:
                     total_paragraphs = int(match.group(1))
@@ -138,7 +162,7 @@ def produce(cfg, player):
                 if job_status in ['failed', 'error', 'stopped']:
                     raise RuntimeError('UNAVAILABLE: remote synthesis failed; inspect job logs')
                 if time.monotonic() > deadline:
-                    raise RuntimeError('Pocket render timed out after two hours')
+                    raise RuntimeError('UNAVAILABLE: remote render timed out after two hours')
                 if time.monotonic() - last_report >= 15:
                     if total_paragraphs:
                         emit(f'Pocket/Whisper {job_status} ({next_paragraph - 1}/{total_paragraphs} paragraphs ready)')
@@ -166,6 +190,8 @@ def produce(cfg, player):
     script = (root / 'script.txt').read_text()
     if not manifest.get('complete') or manifest['script_sha256'] != hashlib.sha256(script.encode()).hexdigest():
         raise RuntimeError('Pocket manifest does not match the complete script')
+    if manifest.get('device') != cfg['device']:
+        raise RuntimeError('UNAVAILABLE: remote manifest does not verify the requested device')
     heard = (root / 'heard.txt').read_text()
     normalize = lambda text: re.findall(r"\w+", text.lower())
     expected, actual = normalize(script), normalize(heard)
@@ -230,7 +256,7 @@ def produce(cfg, player):
     subprocess.run(command + ['-f',container,cfg['output']],check=True,timeout=1800)
     subprocess.run(['ffmpeg','-nostdin','-v','error','-i',cfg['output'],'-f','null','-'],check=True,timeout=1800)
     emit('Pocket render complete')
-    (root / 'result.json').write_text(json.dumps({'duration':manifest['duration_seconds'],'starts':starts}))
+    (root / 'result.json').write_text(json.dumps({'duration':manifest['duration_seconds'],'starts':starts,'device':manifest['device']}))
 
 
 def interrupted(signum, frame):

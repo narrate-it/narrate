@@ -48,9 +48,15 @@ func runPocketAudio(ctx context.Context, stdout, stderr io.Writer, source, scrip
 		voice = "michael"
 	}
 	result, err := pocket.Render(ctx, pocket.Config{Playback: o.stream && o.outputFile == "", SSHUID: o.cfg.TTS.SSHUID, SparkURL: o.cfg.TTS.SparkURL, SSHHost: o.cfg.TTS.SSHHost,
+		Device: o.cfg.TTS.Device, HostPath: o.cfg.TTS.RemoteHostPath, PythonPath: o.cfg.TTS.RemotePython,
+		OutputSubdir: o.cfg.TTS.RemoteOutputSubdir, CacheSubdir: o.cfg.TTS.RemoteCacheSubdir,
+		Image: o.cfg.TTS.RemoteImage, Speed: o.cfg.TTS.Speed, ConnectTimeoutSeconds: o.cfg.TTS.ConnectTimeoutSeconds,
 		Voice: voice, GapMS: o.cfg.ParagraphGapMs, Resume: o.resume, Format: format, Output: temp.Name()}, script, o.cfg.CacheDir, stderr)
 	if err != nil {
 		return err
+	}
+	if result.Device != o.cfg.TTS.Device {
+		return &pocket.UnavailableError{Err: fmt.Errorf("remote device verification failed")}
 	}
 	paras := splitScriptParagraphs(script)
 	if len(result.Starts) != len(paras) {

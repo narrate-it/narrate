@@ -3,10 +3,11 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestOpenRouterDefaultAllowsNativeFallback(t *testing.T) {
+func TestOrderedDefaultsAllowUnconfiguredBackends(t *testing.T) {
 	t.Setenv("NARRATE_CONFIG", filepath.Join(t.TempDir(), "missing.json"))
 	t.Setenv("NARRATE_TTS_BACKEND", "")
 	t.Setenv("OPENROUTER_API_KEY", "")
@@ -16,7 +17,7 @@ func TestOpenRouterDefaultAllowsNativeFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.TTS.Backend != "openrouter" {
+	if cfg.TTS.Backend != "auto" {
 		t.Fatalf("default backend %q", cfg.TTS.Backend)
 	}
 	if cfg.TTS.APIKey != "" || cfg.TTS.Model != "" {
@@ -104,8 +105,8 @@ func TestPocketValidationRemainsUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cfg.Validate(false, true); err == nil {
-		t.Fatal("missing DGX config accepted")
+	if err := cfg.Validate(false, true); err != nil {
+		t.Fatalf("unconfigured remote backend is checked at execution: %v", err)
 	}
 	t.Setenv("NARRATE_SPARK_URL", "http://spark.test")
 	t.Setenv("NARRATE_DGX_SSH_HOST", "user@host")
@@ -148,6 +149,27 @@ func TestSpeechSpeedConfiguration(t *testing.T) {
 			}
 			if err == nil {
 				t.Fatal("invalid speed accepted")
+			}
+		})
+	}
+}
+
+func TestBackendOrderConfiguration(t *testing.T) {
+	for _, tc := range []struct {
+		backend string
+		list    []string
+		valid   bool
+	}{
+		{"auto", []string{"pocket", "openrouter", "native"}, true},
+		{"native,openrouter", nil, true}, {"pocket", nil, true},
+		{"auto", nil, false}, {"auto", []string{"native", "native"}, false},
+		{"native,", nil, false}, {"unknown", nil, false},
+	} {
+		t.Run(tc.backend+strings.Join(tc.list, ","), func(t *testing.T) {
+			cfg := Config{TTS: TTSConfig{Backend: tc.backend, Backends: tc.list}}
+			_, err := cfg.BackendOrder()
+			if (err == nil) != tc.valid {
+				t.Fatalf("valid=%v error=%v", tc.valid, err)
 			}
 		})
 	}
