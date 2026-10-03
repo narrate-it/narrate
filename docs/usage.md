@@ -48,6 +48,15 @@ or provider failure uses the system default macOS voice, with a stderr notice.
 A failed OpenRouter rewrite in audio mode reads the source natively. Explicit
 `--tts=native` and `--tts=pocket` select those backends. See README for details.
 
+## SPEECH SPEED
+
+`--speed=0.85` slows OpenRouter/native speech while preserving pitch. Valid
+values are 0.5–2, default 1. Configure `tts.speed` or `NARRATE_TTS_SPEED` for
+persistent behavior; the flag takes precedence. Adjustment requires ffmpeg,
+works for native fallback, and happens before chapter timing and output
+publication. Paragraph gaps retain their configured duration. Pocket requires
+`--speed=1`; `--rate` remains the native synthesis words-per-minute control.
+
 ## EXIT STATUS
 
 0 success · 1 runtime failure · 2 usage/config error · 130 Ctrl-C

@@ -180,6 +180,18 @@ retried; a timeout may still have incurred provider charges. The manifest record
 the backend that actually generated the recording. There is no global default
 speech model, and OpenRouter speech is not cached by `--resume`.
 
+Use `--speed=0.85` for slower speech without lowering pitch. OpenRouter and
+native speech apply this locally through ffmpeg, so provider speed support is
+not required. Set `tts.speed` in config or `NARRATE_TTS_SPEED` in the environment
+for a persistent default; flags override both. The global default is `1`, and
+the supported range is `0.5` through `2`. The setting also applies to native
+fallback. Paragraph pauses retain their configured length, and chapter timings
+are measured after the speech adjustment. Pocket requires `--speed=1`.
+
+```sh
+narrate --speed=0.85 --verbatim 'Hello from Narrate.'
+```
+
 Use `--tts=native` to explicitly select macOS speech, or `--tts=pocket` to use
 the DGX. Pocket requires `NARRATE_SPARK_URL` and `NARRATE_DGX_SSH_HOST` (or
 `tts.spark_url` and `tts.ssh_host` in config).

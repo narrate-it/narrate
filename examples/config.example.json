@@ -9,7 +9,8 @@
     "spark_url": "http://YOUR-DGX:8080",
     "ssh_host": "USER@YOUR-DGX",
     "ssh_uid": 1000,
-    "model": "mistralai/voxtral-mini-tts-2603"
+    "model": "mistralai/voxtral-mini-tts-2603",
+    "speed": 1
   },
   "paragraph_gap_ms": 650
 }

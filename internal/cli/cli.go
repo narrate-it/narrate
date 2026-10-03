@@ -42,6 +42,8 @@ Options:
                           native voices or shows provider voice configuration.
   -r, --rate=RATE         Words per minute (positive); passed to native speech.
                           Short and long --flag=value forms are both accepted.
+  --speed=N              Pitch-preserving speed multiplier, 0.5–2 (default 1).
+                          OpenRouter/native; lower values speak more slowly.
   --file-format=FMT       AIFF|WAVE|MP3 (or "?" to list available formats).
   --tts=BACKEND           openrouter (default, native fallback) | pocket | native.
   --script-only           Emit only the rewritten conversational script (text
@@ -87,6 +89,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		style         = fs.String("style", "conversational", "")
 		minutes       = fs.Int("minutes", 0, "")
 		tts           = fs.String("tts", "", "")
+		speed         = fs.Float64("speed", 1, "speech tempo multiplier")
 		fileFormat    = fs.String("file-format", "", "")
 		artifacts     = fs.String("artifacts-dir", "", "")
 		resume        = fs.Bool("resume", false, "")
@@ -130,7 +133,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return listVoices(stdout, stderr, *tts)
 	}
 	if *fileFormat == "?" {
-		fmt.Fprintln(stdout, "Available formats: AIFF, WAVE, MP3 (Pocket)")
+		fmt.Fprintln(stdout, "Available formats: AIFF, WAVE, MP3 (MP3 requires ffmpeg)")
 		return ExitOK
 	}
 	if *fileFormat != "" {
@@ -188,6 +191,11 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if *tts != "" {
 		cfg.TTS.Backend = *tts
 	}
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "speed" {
+			cfg.TTS.Speed = *speed
+		}
+	})
 	if *voice != "" {
 		cfg.TTS.Voice = *voice
 	}

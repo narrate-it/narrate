@@ -87,6 +87,7 @@ func TestOpenRouterSpeechAndFallback(t *testing.T) {
 			t.Setenv("NARRATE_TTS_API_KEY", "speech-test")
 			t.Setenv("NARRATE_TTS_BASE_URL", srv.URL)
 			t.Setenv("NARRATE_TTS_VOICE", "alloy")
+			t.Setenv("NARRATE_TTS_SPEED", "0.85")
 			var stdout, stderr strings.Builder
 			dest := filepath.Join(dir, "result.mp3")
 			artifacts := filepath.Join(dir, "artifacts")
@@ -102,10 +103,14 @@ func TestOpenRouterSpeechAndFallback(t *testing.T) {
 				t.Fatal(err)
 			}
 			var manifest struct {
-				Backend string `json:"tts_backend"`
+				Backend string  `json:"tts_backend"`
+				Speed   float64 `json:"speed"`
 			}
 			if json.Unmarshal(data, &manifest) != nil || manifest.Backend != tc.backend {
 				t.Fatalf("wrong actual backend: %s", data)
+			}
+			if manifest.Speed != 0.85 {
+				t.Fatalf("speed lost on %s: %s", tc.backend, data)
 			}
 			if strings.Contains(stderr.String(), "falling back") != (tc.backend == "native") {
 				t.Fatalf("wrong fallback notice: %s", stderr.String())
