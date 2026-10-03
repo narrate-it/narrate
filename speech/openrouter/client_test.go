@@ -50,3 +50,19 @@ func TestSpeechContract(t *testing.T) {
 		t.Fatalf("out=%v err=%v", out, err)
 	}
 }
+
+func TestRejectCredentialLeakingEndpoints(t *testing.T) {
+	for _, endpoint := range []string{
+		"http://127.0.0.1:8000@evil.example",
+		"http://127.0.0.1:8000.evil.example",
+		"http://127.0.0.1:8000?destination=evil",
+		"http://127.0.0.1:8000#fragment",
+	} {
+		t.Run(endpoint, func(t *testing.T) {
+			_, err := (Client{Key: "test", BaseURL: endpoint}).Speak(context.Background(), "model", "voice", "Hello")
+			if err == nil || err.Error() != "speech: unsupported endpoint" {
+				t.Fatalf("unsafe endpoint accepted: %v", err)
+			}
+		})
+	}
+}

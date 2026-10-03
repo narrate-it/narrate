@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -87,68 +88,27 @@ func execute(stdin io.Reader, stdout, stderr io.Writer, src input.Source, o opti
 		}
 	}
 
-	// Rewrite stage.
+	// Rewrite stage. Only provider/config failures may degrade to reading the source.
 	var script string
 	if o.verbatim {
 		script = narration.JoinScript([]string{src.Text})
 	} else {
-		rewriteStarted := time.Now()
-		store, err := cache.Open(o.cfg.CacheDir)
+		script, err = rewriteScript(ctx, stderr, src, o)
 		if err != nil {
-			return fmt.Errorf("opening cache: %w", err)
-		}
-		client, err := ai.New(ai.Config{
-			Provider: o.cfg.AI.Provider,
-			APIKey:   o.cfg.AI.APIKey,
-			BaseURL:  o.cfg.AI.BaseURL,
-			Model:    o.cfg.AI.Model,
-		})
-		if err != nil {
-			return err
-		}
-
-		// Cache identity: source hash + prompt digest + provider/model/options.
-		promptDigest, err := narration.EffectiveDigest(o.style)
-		if err != nil {
-			return err
-		}
-		srcSum := sha256Hex(src.Text)
-		rewriteKey := cache.Key("rewrite-v1", srcSum, promptDigest, o.cfg.AI.Provider, o.cfg.AI.BaseURL, o.cfg.AI.Model, o.style)
-
-		chunker := narration.NewChunker(12000, 400)
-		chunks := chunker.Chunk(src.Text)
-
-		if o.resume {
-			var cached struct {
-				Parts []string `json:"parts"`
-			}
-			if ok, _ := store.GetJSON(rewriteKey, &cached); ok && len(cached.Parts) == len(chunks) {
-				if o.progress {
-					fmt.Fprintf(stderr, "narrate: rewrite reused from cache (%d chunks, %s elapsed)\n", len(cached.Parts), elapsedSince(rewriteStarted))
+			var unavailable *rewriteUnavailable
+			if !o.scriptOnly && o.cfg.TTS.Backend == "openrouter" && o.cfg.AI.Provider == "openrouter" && ctx.Err() == nil && errors.As(err, &unavailable) {
+				if runtime.GOOS != "darwin" {
+					return fmt.Errorf("OpenRouter rewrite unavailable; native fallback requires macOS: %w", err)
 				}
-				script = narration.JoinScript(cached.Parts)
-			}
-		}
-
-		if script == "" {
-			if o.progress {
-				fmt.Fprintf(stderr, "narrate: rewriting %d chunks\n", len(chunks))
-			}
-			rw := &narration.Rewriter{Client: client, Style: o.style}
-			parts, err := rw.RewriteAllWithCount(ctx, chunks, func(done, total int) {
-				if o.progress {
-					fmt.Fprintf(stderr, "narrate: rewriting chunk %d/%d (%s elapsed)\n", done, total, elapsedSince(rewriteStarted))
+				if o.fileFormat == "" && o.outputFile != "" && filepath.Ext(o.outputFile) == "" {
+					o.fileFormat = "MP3"
 				}
-			})
-			if err != nil {
-				return fmt.Errorf("rewrite failed: %w", err)
+				fmt.Fprintln(stderr, "narrate: OpenRouter rewrite unavailable; falling back to native speech with the original text")
+				o = nativeFallbackOptions(o)
+				script = narration.JoinScript([]string{src.Text})
+			} else {
+				return err
 			}
-			if err := store.PutJSON(rewriteKey, struct {
-				Parts []string `json:"parts"`
-			}{parts}); err != nil {
-				return fmt.Errorf("caching rewrite: %w", err)
-			}
-			script = narration.JoinScript(parts)
 		}
 	}
 
@@ -168,7 +128,10 @@ func execute(stdin io.Reader, stdout, stderr io.Writer, src input.Source, o opti
 	}
 
 	// Audio workflow.
-	if o.cfg.TTS.Backend == "pocket" || o.cfg.TTS.Backend == "" {
+	if o.cfg.TTS.Backend == "openrouter" || o.cfg.TTS.Backend == "" {
+		return runPreferredAudio(ctx, stdout, stderr, src.Text, script, o)
+	}
+	if o.cfg.TTS.Backend == "pocket" {
 		return runPocketAudio(ctx, stdout, stderr, src.Text, script, o)
 	}
 	return runAudio(ctx, stdout, stderr, src.Text, script, o)
@@ -267,4 +230,73 @@ func publishTemp(temp, dest string, force bool) error {
 
 func elapsedSince(start time.Time) string {
 	return time.Since(start).Truncate(time.Second).String()
+}
+
+// rewriteUnavailable distinguishes provider/config failures from local cache errors.
+type rewriteUnavailable struct{ err error }
+
+func (e *rewriteUnavailable) Error() string { return "rewrite unavailable" }
+func (e *rewriteUnavailable) Unwrap() error { return e.err }
+
+func rewriteScript(ctx context.Context, stderr io.Writer, src input.Source, o options) (string, error) {
+	var script string
+	rewriteStarted := time.Now()
+	store, err := cache.Open(o.cfg.CacheDir)
+	if err != nil {
+		return "", fmt.Errorf("opening cache: %w", err)
+	}
+	client, err := ai.New(ai.Config{
+		Provider: o.cfg.AI.Provider,
+		APIKey:   o.cfg.AI.APIKey,
+		BaseURL:  o.cfg.AI.BaseURL,
+		Model:    o.cfg.AI.Model,
+	})
+	if err != nil {
+		return "", &rewriteUnavailable{err}
+	}
+
+	// Cache identity: source hash + prompt digest + provider/model/options.
+	promptDigest, err := narration.EffectiveDigest(o.style)
+	if err != nil {
+		return "", err
+	}
+	srcSum := sha256Hex(src.Text)
+	rewriteKey := cache.Key("rewrite-v1", srcSum, promptDigest, o.cfg.AI.Provider, o.cfg.AI.BaseURL, o.cfg.AI.Model, o.style)
+
+	chunker := narration.NewChunker(12000, 400)
+	chunks := chunker.Chunk(src.Text)
+
+	if o.resume {
+		var cached struct {
+			Parts []string `json:"parts"`
+		}
+		if ok, _ := store.GetJSON(rewriteKey, &cached); ok && len(cached.Parts) == len(chunks) {
+			if o.progress {
+				fmt.Fprintf(stderr, "narrate: rewrite reused from cache (%d chunks, %s elapsed)\n", len(cached.Parts), elapsedSince(rewriteStarted))
+			}
+			script = narration.JoinScript(cached.Parts)
+		}
+	}
+
+	if script == "" {
+		if o.progress {
+			fmt.Fprintf(stderr, "narrate: rewriting %d chunks\n", len(chunks))
+		}
+		rw := &narration.Rewriter{Client: client, Style: o.style}
+		parts, err := rw.RewriteAllWithCount(ctx, chunks, func(done, total int) {
+			if o.progress {
+				fmt.Fprintf(stderr, "narrate: rewriting chunk %d/%d (%s elapsed)\n", done, total, elapsedSince(rewriteStarted))
+			}
+		})
+		if err != nil {
+			return "", &rewriteUnavailable{err}
+		}
+		if err := store.PutJSON(rewriteKey, struct {
+			Parts []string `json:"parts"`
+		}{parts}); err != nil {
+			return "", fmt.Errorf("caching rewrite: %w", err)
+		}
+		script = narration.JoinScript(parts)
+	}
+	return script, nil
 }

@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptrace"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -54,8 +55,11 @@ func (c Client) call(ctx context.Context, path string, body any, max int64) (Res
 	if base == "" {
 		base = BaseURL
 	}
-	if base != BaseURL && !strings.HasPrefix(base, "http://127.0.0.1:") {
-		return out, nil, errors.New("speech: unsupported endpoint")
+	if base != BaseURL {
+		u, err := url.Parse(base)
+		if err != nil || u.Scheme != "http" || u.Hostname() != "127.0.0.1" || u.Port() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return out, nil, errors.New("speech: unsupported endpoint")
+		}
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", base+path, bytes.NewReader(raw))
 	if err != nil {
