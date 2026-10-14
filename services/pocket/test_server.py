@@ -59,6 +59,11 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(r.status,401)
         r = await self.post(c,True)
         self.assertEqual(r.status,400)
+    async def test_json_escaping_does_not_reduce_text_limit(self):
+        c, _ = await self.client(Model())
+        r = await c.post('/v1/synthesize', json=dict(generation=1,text_sequence=1,voice='anna',text='"'*12000))
+        self.assertEqual(r.status,200)
+        self.assertIn('"type":"done"',await r.text())
     async def test_disconnect_cancels_and_releases(self):
         m = Model(hold=True)
         c, service = await self.client(m)
