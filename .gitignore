@@ -3,3 +3,5 @@
 *.wav
 __pycache__/
 *.mp3
+
+__pycache__/
