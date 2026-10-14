@@ -1,0 +1,74 @@
+{
+  "pod": "narrate-anna-runtime-20261013-06",
+  "status": "completed",
+  "started_at": "2026-10-13T21:59:36.288093168-07:00",
+  "finished_at": "2026-10-13T21:59:50.929764058-07:00",
+  "image": "nvcr.io/nvidia/pytorch:26.02-py3",
+  "observed_cached_image_id": "c0e6c0b168faa1be027564e9a004e842c342e22ea51903d5fc7b9008850398d0",
+  "resources": {
+    "cpu": 1,
+    "memory_gib": 2,
+    "gpu": 0
+  },
+  "pocket_source_revision": "b94db177bc0f77517d9b124843e25605d6f9aed8",
+  "read_only_host_mounts": true,
+  "measurements": [
+    {
+      "whisper_cache_directories": []
+    },
+    {
+      "package": "pocket-tts",
+      "version": "3.3.0"
+    },
+    {
+      "package": "torch",
+      "version": "2.11.0a0+eb65b36914.nv26.2"
+    },
+    {
+      "package": "aiohttp",
+      "version": "3.14.5"
+    },
+    {
+      "model_load_seconds": 0.2566950119799003,
+      "sample_rate": 24000
+    },
+    {
+      "generation": 1,
+      "first_pcm_seconds": 0.09730027796467766,
+      "total_seconds": 1.112287911993917,
+      "frames": 41,
+      "samples": 78720,
+      "max_frame_gap_seconds": 0.03389539901399985,
+      "terminal": true,
+      "pcm_sha256": "257c0cb8e44dab92b453acf9ede5159154e64f1b2ece1fb91a089f5a64a6ae14"
+    },
+    {
+      "generation": 2,
+      "first_pcm_seconds": 0.0758691459777765,
+      "total_seconds": 0.7270599310286343,
+      "frames": 27,
+      "samples": 51840,
+      "max_frame_gap_seconds": 0.03347031900193542,
+      "terminal": true,
+      "pcm_sha256": "82a6a981c2768c80c56cd93bdf199cef60da87fef68e7cdd3c3c88b0c7fdcb13"
+    },
+    {
+      "cancel_seconds": 0.010885808034799993,
+      "worker_released": true,
+      "healthy": true
+    },
+    {
+      "recovered_after_cancellation": true,
+      "external_connections_allowed": false
+    }
+  ],
+  "limitations": [
+    "Two short timed phrases, one cancellation, one recovery; not a statistical latency qualification.",
+    "No microphone, speaker playback, listening acceptance, STT concurrency or two-hour endurance.",
+    "Python TCP connect guard and offline local model files; not a host firewall or all-protocol egress-denial test.",
+    "Package preparation downloaded pinned dependencies into ephemeral container paths; no production packages or assets modified."
+  ],
+  "discovery_failures": [
+    "Python slim has no production torch package; production Pocket3.0.2 lacks stop parameter. Both detected without successful synthesis claims."
+  ]
+}

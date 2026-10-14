@@ -1,0 +1,53 @@
+{
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+    "name": "narrate-anna-pin-20261013-01"
+  },
+  "spec": {
+    "restartPolicy": "Never",
+    "containers": [
+      {
+        "name": "probe",
+        "image": "docker.io/library/python:3.12-slim",
+        "command": [
+          "python",
+          "-c",
+          "import hashlib,json,pathlib,signal\nsignal.alarm(60)\nroot=pathlib.Path('/pocket')\nfor path in root.rglob('*.py'):\n text=path.read_text()\n if 'anna' in text.lower():\n  lines=text.splitlines()\n  for i,line in enumerate(lines):\n   if 'anna' in line.lower():print(json.dumps({'source':str(path),'lines':lines[max(0,i-2):i+3]}))\nfor path in root.rglob('*.yaml'):\n print(json.dumps({'config':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'text':path.read_text()}))\ncache=pathlib.Path('/hub')\nfor model in cache.glob('*pocket*'):\n for path in model.glob('snapshots/**/*'):\n  if path.is_file():print(json.dumps({'asset':str(path),'size':path.stat().st_size,'sha256':hashlib.file_digest(path.open('rb'),'sha256').hexdigest()}))\nfor model in cache.glob('*tts-voices*'):\n for path in model.glob('snapshots/**/*'):\n  if path.is_file() and any(x in str(path).lower() for x in ['anna','p228_023']): print(json.dumps({'voice_asset':str(path),'size':path.stat().st_size,'sha256':hashlib.file_digest(path.open('rb'),'sha256').hexdigest()}))\n"
+        ],
+        "resources": {
+          "limits": {
+            "cpu": "1",
+            "memory": "2Gi"
+          }
+        },
+        "volumeMounts": [
+          {
+            "name": "pocket",
+            "mountPath": "/pocket",
+            "readOnly": true
+          },
+          {
+            "name": "hub",
+            "mountPath": "/hub",
+            "readOnly": true
+          }
+        ]
+      }
+    ],
+    "volumes": [
+      {
+        "name": "pocket",
+        "hostPath": {
+          "path": "/var/lib/zerfoo/vibevoice-cache/venv/lib/python3.12/site-packages/pocket_tts"
+        }
+      },
+      {
+        "name": "hub",
+        "hostPath": {
+          "path": "/var/lib/zerfoo/vibevoice-cache/hf/hub"
+        }
+      }
+    ]
+  }
+}

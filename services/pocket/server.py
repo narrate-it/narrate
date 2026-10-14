@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import json
+import inspect
 import logging
 import os
 import queue
@@ -20,6 +21,9 @@ FORMAT = {"encoding": "pcm_s16le", "sample_rate": 24000, "channels": 1}
 
 class Service:
     def __init__(self, model, voice, token, timeout=40):
+        parameters = inspect.signature(model.generate_audio_stream).parameters
+        if "stop" not in parameters:
+            raise ValueError("Pocket backend lacks cancellable streaming; use pinned requirements")
         self.model, self.voice, self.token = model, voice, token
         self.timeout = timeout
         self.busy = threading.Lock()
