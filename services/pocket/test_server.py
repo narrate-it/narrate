@@ -46,6 +46,12 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         return c, service
     async def post(self,c,generation=1):
         return await c.post('/v1/synthesize',json=dict(generation=generation,text_sequence=1,voice='anna',text='Hello'))
+    async def test_rejects_noncancellable_backend(self):
+        class OldModel:
+            def generate_audio_stream(self, voice, text, copy_state):
+                return iter(())
+        with self.assertRaisesRegex(ValueError, "cancellable"):
+            Service(OldModel(), object(), "secret")
     async def test_ordered_pcm_terminal(self):
         c, _ = await self.client(Model())
         r = await self.post(c,7)

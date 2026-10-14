@@ -1,0 +1,31 @@
+{
+  "pod": "narrate-anna-pin-20261013-01",
+  "read_only": true,
+  "assets": [
+    {
+      "config": "/pocket/config/english.yaml",
+      "sha256": "463605b15840d1c62666d1669b0fc70495c45ef4e8fc8ebda422f7e0fbc0f546",
+      "text": "# sig: a0ac5076.yaml\n\nweights_path: hf://kyutai/pocket-tts/languages/english/model.safetensors@39592ff23c9ef80098bb74895d104c26275fe2c9\nweights_path_without_voice_cloning: hf://kyutai/pocket-tts-without-voice-cloning/languages/english/model.safetensors@d29db7978e464fb90cb3359ee0c69a273b9142cc\n# Human evals preferred this model at 0.3 (equal WER/similarity/speech rate).\ndefault_temperature: 0.3\n\n\nflow_lm:\n  insert_bos_before_voice: true\n  dtype: float32\n  flow:\n    depth: 6\n    dim: 512\n  transformer:\n    d_model: 1024\n    hidden_scale: 4\n    max_period: 10000\n    num_heads: 16\n    num_layers: 6\n  lookup_table:\n    dim: 1024\n    n_bins: 4000\n    tokenizer: sentencepiece\n    tokenizer_path: hf://kyutai/pocket-tts-without-voice-cloning/languages/english/tokenizer.model@d29db7978e464fb90cb3359ee0c69a273b9142cc\n  #weights_path: final.safetensors\n\nmimi:\n  dtype: float32\n  sample_rate: 24000\n  inner_dim: 32\n  outer_dim: 512\n  channels: 1\n  frame_rate: 12.5\n  seanet:\n    dimension: 512\n    channels: 1\n    n_filters: 64\n    n_residual_layers: 1\n    ratios:\n    - 6\n    - 5\n    - 4\n    kernel_size: 7\n    residual_kernel_size: 3\n    last_kernel_size: 3\n    dilation_base: 2\n    pad_mode: constant\n    compress: 2\n  transformer:\n    d_model: 512\n    num_heads: 8\n    num_layers: 2\n    layer_scale: 0.01\n    context: 250\n    dim_feedforward: 2048\n    input_dimension: 512\n    output_dimensions:\n    - 512\n  quantizer:\n    dimension: 32\n    output_dimension: 512\n  #weights_path: codec.safetensors\n"
+    },
+    {
+      "asset": "/hub/models--kyutai--pocket-tts/snapshots/39592ff23c9ef80098bb74895d104c26275fe2c9/languages/english/model.safetensors",
+      "size": 219029196,
+      "sha256": "473f47d99560bd50eb8b4509d3cacfe7f316ab20bdca86505403a2e6a936a6e9"
+    },
+    {
+      "asset": "/hub/models--kyutai--pocket-tts-without-voice-cloning/snapshots/e81d79e8194ad4c7ce879c87a4258ef20cbf2487/languages/english/embeddings/anna.safetensors",
+      "size": 7816440,
+      "sha256": "5ea82f78db006c9fd34e32ddd5aae82674b5b32646097977436458d00af80dfa"
+    },
+    {
+      "asset": "/hub/models--kyutai--pocket-tts-without-voice-cloning/snapshots/d29db7978e464fb90cb3359ee0c69a273b9142cc/languages/english/tokenizer.model",
+      "size": 59339,
+      "sha256": "d461765ae179566678c93091c5fa6f2984c31bbe990bf1aa62d92c64d91bc3f6"
+    },
+    {
+      "asset": "/hub/models--kyutai--pocket-tts-without-voice-cloning/snapshots/d29db7978e464fb90cb3359ee0c69a273b9142cc/languages/english/model.safetensors",
+      "size": 219029196,
+      "sha256": "be9c6b4876d3f30740a8225dfcaa2e43dc4aeb753c15272735bee16bbb4abb0a"
+    }
+  ]
+}

@@ -61,8 +61,23 @@ client deliberately calls it synchronously to preserve backpressure.
 The owner-approved `zati-coming-soon-anna-20261009.receipt.json` identifies Pocket
 Anna; the maintained `zati-video` skill specifies seed 20261009 and native 24 kHz
 mono. Those local receipts do **not** contain the original preset asset hash.
-Deployment must reconcile that existing production asset and record its SHA-256;
-a newly downloaded same-named voice is not proof of identity.
+A tracked read-only Spark probe subsequently reconciled the cached preset; see
+`qualification/asset-pins.json`. Anna SHA-256 is
+`5ea82f78db006c9fd34e32ddd5aae82674b5b32646097977436458d00af80dfa`.
+`stage_assets.py` verifies and stages that preset, the exact English model and
+tokenizer into a new directory, replacing download references with `/models`
+paths. `spark_manifest.py` defaults to those concrete Anna and staged-config
+hashes. Existing files are never overwritten.
+
+```sh
+python stage_assets.py --hub /prepared/hub \
+  --pocket-package /prepared/site-packages/pocket_tts --output /prepared/anna-bundle
+```
+
+The cached production Pocket 3.0.2 package cannot cancel streaming: it lacks the
+`stop` argument. The service rejects such a backend during construction instead
+of advertising readiness and failing on the first phrase. Use the newer pinned
+requirements; the existing model and Anna assets remain explicitly pinned.
 
 Upstream source pinned at `b94db177bc0f77517d9b124843e25605d6f9aed8` exposes
 `generate_audio_stream(..., copy_state=True, stop=threading.Event())`, 24 kHz PCM,
@@ -78,3 +93,19 @@ truncated wire streams, ordering, exact phrase boundaries, disconnect cancellati
 overload and timeout. They do not measure actual Pocket inference. Before release,
 record ARM64 model/config/asset hashes, warm first-frame p50/p95, chunk intervals,
 cancellation latency, continuity/listening acceptance and concurrent STT load.
+
+### Measured bounded Spark check
+
+`qualification/runtime-receipt.json` records a real ARM64 run of this service
+using the pinned upstream source, existing Anna/model assets and staged local
+config. One CPU, 2 GiB, no GPU; all host mounts read-only. Two phrases produced
+24 kHz PCM with explicit terminal records: first-frame times **97 ms and 76 ms**,
+maximum inter-frame gaps **34 ms**, and 3.28 / 2.16 seconds of audio. Cancellation
+released inference in **11 ms**; a subsequent phrase completed successfully.
+These are two samples, not p50/p95 or a conversational latency guarantee.
+
+The test denied non-loopback Python TCP connections after dependency preparation
+and used local model references. This establishes that this exercised path did
+not need a remote model fetch; it is not the RFC's all-protocol firewall test.
+No speaker, human listening, concurrent STT or endurance acceptance is claimed.
+The owned probe pod was removed after recording its terminal result.
