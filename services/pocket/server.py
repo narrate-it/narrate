@@ -26,7 +26,7 @@ class Service:
         self.healthy = True
 
     def authorize(self, request):
-        return hmac.compare_digest(request.headers.get("Authorization", ""), "Bearer " + self.token)
+        return hmac.compare_digest(request.headers.get("Authorization", "").encode(), ("Bearer " + self.token).encode())
 
     async def health(self, request):
         if not self.authorize(request):
@@ -125,7 +125,7 @@ class Service:
 
 
 def application(service):
-    app = web.Application(client_max_size=20 << 10)
+    app = web.Application(client_max_size=128 << 10)
     app.router.add_get('/healthz', service.health)
     app.router.add_post('/v1/synthesize', service.synthesize)
     return app
