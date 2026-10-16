@@ -20,11 +20,12 @@ FORMAT = {"encoding": "pcm_s16le", "sample_rate": 24000, "channels": 1}
 
 
 class Service:
-    def __init__(self, model, voice, token, timeout=40):
+    def __init__(self, model, voice, token, timeout=40, voices=None):
         parameters = inspect.signature(model.generate_audio_stream).parameters
         if "stop" not in parameters:
             raise ValueError("Pocket backend lacks cancellable streaming; use pinned requirements")
         self.model, self.voice, self.token = model, voice, token
+        self.voices = {"anna": voice, **(voices or {})}
         self.timeout = timeout
         self.busy = threading.Lock()
         self.healthy = True
@@ -35,7 +36,7 @@ class Service:
     async def health(self, request):
         if not self.authorize(request):
             raise web.HTTPUnauthorized()
-        return web.json_response({"ready": self.healthy, "voice": "anna", "format": FORMAT}, status=200 if self.healthy else 503)
+        return web.json_response({"ready": self.healthy, "voice": "anna", "voices": sorted(self.voices), "format": FORMAT}, status=200 if self.healthy else 503)
 
     async def synthesize(self, request):
         if not self.authorize(request):
@@ -46,7 +47,7 @@ class Service:
             text = data["text"]
             if (type(generation) is not int or not 0 < generation < 2**64
                     or type(text_sequence) is not int or not 0 < text_sequence < 2**64
-                    or data["voice"] != "anna" or not isinstance(text, str)
+                    or not isinstance(data["voice"], str) or data["voice"] not in self.voices or not isinstance(text, str)
                     or not text.strip() or len(text.encode()) > 16384):
                 raise ValueError()
         except (ValueError, KeyError, TypeError):
@@ -70,7 +71,7 @@ class Service:
         def produce():
             try:
                 # Pocket's model is not thread safe. This worker owns the model until exit.
-                stream = self.model.generate_audio_stream(self.voice, text, copy_state=True, stop=stop)
+                stream = self.model.generate_audio_stream(self.voices[data["voice"]], text, copy_state=True, stop=stop)
                 for audio in stream:
                     if stop.is_set():
                         break
@@ -147,6 +148,7 @@ def main():
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8092)
     parser.add_argument('--token-file', required=True)
+    parser.add_argument('--voices-manifest', help='Offline preset manifest; filenames and SHA256 digests')
     parser.add_argument('--anna-asset', required=True)
     parser.add_argument('--anna-sha256', required=True)
     parser.add_argument('--model-config', required=True)
@@ -169,7 +171,18 @@ def main():
     if model.sample_rate != 24000:
         raise ValueError('Anna profile requires native 24000 Hz')
     voice = model.get_state_for_audio_prompt(str(anna))
-    web.run_app(application(Service(model, voice, token)), host=args.host, port=args.port, access_log=None, handler_cancellation=True, shutdown_timeout=3)
+    voices = {}
+    manifest = Path(args.voices_manifest) if args.voices_manifest else anna.parent / 'voices.json'
+    if manifest.exists():
+        entries = json.loads(manifest.read_text())
+        if not isinstance(entries, dict) or len(entries) > 32:
+            raise ValueError('invalid voice manifest')
+        for name, item in entries.items():
+            if not isinstance(name, str) or not name.replace('_', '').isalnum() or len(name) > 64:
+                raise ValueError('invalid preset identifier')
+            asset = verified_file(manifest.parent / (name + '.safetensors'), item['sha256'])
+            voices[name] = model.get_state_for_audio_prompt(str(asset))
+    web.run_app(application(Service(model, voice, token, voices=voices)), host=args.host, port=args.port, access_log=None, handler_cancellation=True, shutdown_timeout=3)
 
 
 if __name__ == '__main__':

@@ -65,6 +65,24 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(r.status,401)
         r = await self.post(c,True)
         self.assertEqual(r.status,400)
+    async def test_selected_voice_and_unknown_voice(self):
+        m = Model()
+        c, service = await self.client(m)
+        selected = object()
+        service.voices['michael'] = selected
+        observed = []
+        original = m.generate_audio_stream
+        def generate(voice, text, copy_state, stop):
+            observed.append(voice)
+            return original(voice, text, copy_state, stop)
+        m.generate_audio_stream = generate
+        r = await c.post('/v1/synthesize', json=dict(generation=1,text_sequence=1,voice='michael',text='Hello'))
+        self.assertEqual(r.status,200)
+        await r.read()
+        self.assertIs(observed[0],selected)
+        r = await c.post('/v1/synthesize', json=dict(generation=2,text_sequence=1,voice='../unknown',text='Hello'))
+        self.assertEqual(r.status,400)
+
     async def test_json_escaping_does_not_reduce_text_limit(self):
         c, _ = await self.client(Model())
         r = await c.post('/v1/synthesize', json=dict(generation=1,text_sequence=1,voice='anna',text='"'*12000))
