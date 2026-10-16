@@ -97,7 +97,7 @@ func New(cfg Config) (*Client, error) {
 // Closing Chunks means successful input completion. Cancellation or any stream failure returns
 // an error; an HTTP EOF without a validated done record can never mean success.
 func (c *Client) Synthesize(ctx context.Context, r Request, emit func(Frame) error) error {
-	if r.Generation == 0 || r.Voice != "anna" || r.Chunks == nil || emit == nil {
+	if r.Generation == 0 || !validVoice(r.Voice) || r.Chunks == nil || emit == nil {
 		return errors.New("local speech: generation, Anna voice, chunks and callback required")
 	}
 	var textSequence, sequence, offset uint64
@@ -201,4 +201,13 @@ func (c *Client) phrase(ctx context.Context, r Request, t TextChunk, seq, offset
 	}
 	*seq++
 	return emit(Frame{Generation: r.Generation, Sequence: *seq, TextSequence: t.Sequence, Offset: *offset, Format: format, PhraseEnd: true})
+}
+
+// Preset identifiers only: arbitrary paths and URLs are never passed downstream.
+func validVoice(v string) bool {
+	switch v {
+	case "alba", "anna", "azelma", "bill_boerst", "caro_davy", "charles", "cosette", "eponine", "eve", "fantine", "george", "jane", "jean", "javert", "marius", "mary", "michael", "paul", "peter_yearsley", "stuart_bell", "vera":
+		return true
+	}
+	return false
 }
