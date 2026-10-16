@@ -289,3 +289,8 @@ python3 -m unittest discover -s internal/pocket -p '*_test.py'
 
 The test suite covers provider requests, native audio conversion, output
 preservation, remote job management, file transfer, and audio decoding.
+
+## License
+
+Narrate source code is licensed under the [Apache License 2.0](LICENSE).
+Third-party dependencies and model assets retain their respective licenses.
