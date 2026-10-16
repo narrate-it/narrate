@@ -109,3 +109,12 @@ and used local model references. This establishes that this exercised path did
 not need a remote model fetch; it is not the RFC's all-protocol firewall test.
 No speaker, human listening, concurrent STT or endurance acceptance is claimed.
 The owned probe pod was removed after recording its terminal result.
+
+### Additional prepared voices
+
+Run `stage_voices.py --embeddings <pinned-cache-snapshot>/languages/english/embeddings
+--output <prepared-model-directory>` before starting the service. This performs no
+network downloads, preserves existing assets, and records each preset's SHA256.
+The service loads `voices.json` next to the Anna asset (or the explicit
+`--voices-manifest`), verifies every listed asset, and reports its available names
+in authenticated `/healthz`. Unknown names are rejected; there is no Anna fallback.
