@@ -83,6 +83,12 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         r = await c.post('/v1/synthesize', json=dict(generation=2,text_sequence=1,voice='../unknown',text='Hello'))
         self.assertEqual(r.status,400)
 
+    def test_manifest_cannot_replace_pinned_anna(self):
+        pinned, other = object(), object()
+        service = Service(Model(), pinned, 'secret', voices={'anna': other, 'michael': other})
+        self.assertIs(service.voices['anna'], pinned)
+        self.assertIs(service.voices['michael'], other)
+
     async def test_json_escaping_does_not_reduce_text_limit(self):
         c, _ = await self.client(Model())
         r = await c.post('/v1/synthesize', json=dict(generation=1,text_sequence=1,voice='anna',text='"'*12000))

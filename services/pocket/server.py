@@ -25,7 +25,8 @@ class Service:
         if "stop" not in parameters:
             raise ValueError("Pocket backend lacks cancellable streaming; use pinned requirements")
         self.model, self.voice, self.token = model, voice, token
-        self.voices = {"anna": voice, **(voices or {})}
+        # The hash-pinned Anna profile always wins over a manifest entry of the same name.
+        self.voices = {**(voices or {}), "anna": voice}
         self.timeout = timeout
         self.busy = threading.Lock()
         self.healthy = True
@@ -173,6 +174,8 @@ def main():
     voice = model.get_state_for_audio_prompt(str(anna))
     voices = {}
     manifest = Path(args.voices_manifest) if args.voices_manifest else anna.parent / 'voices.json'
+    if args.voices_manifest and not manifest.is_file():
+        raise ValueError('voice manifest not found: ' + str(manifest))
     if manifest.exists():
         entries = json.loads(manifest.read_text())
         if not isinstance(entries, dict) or len(entries) > 32:
