@@ -98,7 +98,7 @@ func New(cfg Config) (*Client, error) {
 // an error; an HTTP EOF without a validated done record can never mean success.
 func (c *Client) Synthesize(ctx context.Context, r Request, emit func(Frame) error) error {
 	if r.Generation == 0 || !validVoice(r.Voice) || r.Chunks == nil || emit == nil {
-		return errors.New("local speech: generation, Anna voice, chunks and callback required")
+		return errors.New("local speech: generation, a prepared voice, chunks and callback required")
 	}
 	var textSequence, sequence, offset uint64
 	for {
