@@ -15,7 +15,7 @@ import (
 )
 
 // Version is the released tool version.
-const Version = "1.1.0"
+const Version = "1.2.1"
 
 // Exit codes.
 const (
