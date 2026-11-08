@@ -214,10 +214,14 @@ func sha256Hex(s string) string {
 // publishTemp atomically publishes completed output; Link enforces no-clobber.
 func publishTemp(temp, dest string, force bool) error {
 	if force {
-		return os.Rename(temp, dest)
-	}
-	if err := os.Link(temp, dest); err != nil {
+		if err := os.Rename(temp, dest); err != nil {
+			return err
+		}
+	} else if err := os.Link(temp, dest); err != nil {
 		return fmt.Errorf("publishing %s (use --force to replace existing files): %w", dest, err)
+	}
+	if err := clearHidden(dest); err != nil {
+		return fmt.Errorf("making %s visible: %w", dest, err)
 	}
 	return nil
 }
